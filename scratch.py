@@ -50,20 +50,26 @@ def control_relays():
         current_time = (current_date_time.tm_hour, current_date_time.tm_min)
 
         for i, button_state in enumerate(buttons):
-            # Check if it's a watering day for the current garden bed (i).
-            if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-                if watering_duration_countdown[i] == 0:
-                    # If it's a watering day, the current time matches the watering time, and the watering hasn't started yet,
-                    # activate the corresponding relay by setting its value to RELAY_ACTIVE.
-                    relays[i].value = RELAY_ACTIVE
-                    print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
-                    # Set the watering duration countdown in seconds based on the specified duration in minutes.
-                    watering_duration_countdown[i] = watering_times[i][2] * 60
+            # Check if the button has been pressed (active LOW), indicating that the relay should be activated manually.
+            if not button_state.value:
+                # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
+                relays[i].value = RELAY_ACTIVE
+                print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
             else:
-                # If it's not a watering day or the watering time does not match, set the corresponding relay value to RELAY_INACTIVE to turn off the relay.
-                relays[i].value = RELAY_INACTIVE
-                print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
-                watering_duration_countdown[i] = 0  # Reset the watering duration countdown when not watering.
+                # If the button is not pressed (active HIGH), check if it's a watering day and the current time matches the watering time.
+                if is_watering_day(i, current_day) and is_watering_time(i, current_time):
+                    if watering_duration_countdown[i] == 0:
+                        # If it's a watering day, the current time matches the watering time, and the watering hasn't started yet,
+                        # activate the corresponding relay by setting its value to RELAY_ACTIVE.
+                        relays[i].value = RELAY_ACTIVE
+                        print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
+                        # Set the watering duration countdown in seconds based on the specified duration in minutes.
+                        watering_duration_countdown[i] = watering_times[i][2] * 60
+                else:
+                    # If it's not a watering day or the watering time does not match, set the corresponding relay value to RELAY_INACTIVE to turn off the relay.
+                    relays[i].value = RELAY_INACTIVE
+                    print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
+                    watering_duration_countdown[i] = 0  # Reset the watering duration countdown when not watering.
 
             # Decrement the watering duration countdown for the current garden bed if it's greater than 0.
             if watering_duration_countdown[i] > 0:
