@@ -16,10 +16,25 @@ Advanced Function Goals:
 TODO: The current set_rtc_datetime function grabs unixtime, raw_offset and DST (daylight savings) to calculate and
  set the real time clock built into the Pico. It would be nice to just grab datetime and find a way to parse and format
  the variable.  Would make the code much cleaner.
-TODO: Create a scheduling system so we can water on set days of the week.
+
 TODO: Create a web interface of some sort which will allow us to modify the schedule and/or turn on/off relays.
 
+TODO: Look into using the Bluetooth soil moisture sensors the I purchased when switchdocs stopped selling raspberry pi project parts.
+
+TODO: Create a scheduling system for weekly watering.  How should the scheduler work?  Some beds may need daily
+  watering while others might only need every other day. Each bed should probably have its own weekly schedule.
+
 How the system should function:
-Each garden bed will have its own 12v solenoid and a button to activate/deactivate it.
+Each garden bed will have its own 12v solenoid and a corresponding button to activate/deactivate it.
+Use circuitpython_schedule to setup a weekly watering schedule.
 
 Current Time Format: struct_time(tm_year=2023, tm_mon=8, tm_mday=6, tm_hour=17, tm_min=51, tm_sec=40, tm_wday=6, tm_yday=218, tm_isdst=-1)
+tm_wday=
+0: Monday
+1: Tuesday
+2: Wednesday
+3: Thursday
+4: Friday
+5: Saturday
+6: Sunday
+
