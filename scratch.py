@@ -73,6 +73,9 @@ watering_times = [
 # Create a list to store the watering duration countdown for each garden bed, initialized to 0 (not watering).
 watering_duration_countdown = [0] * len(watering_times)
 
+# Create a list to store the manual activation flag for each relay, initialized to False (not manually activated).
+manual_activation_flags = [False] * len(relays)
+
 def is_watering_day(garden_bed_index, current_day):
     # ... (previous code remains the same)
 
@@ -95,11 +98,14 @@ def control_relays():
             if not button_state.value:
                 # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
                 relays[i].value = RELAY_ACTIVE
+                # Set the manual activation flag for the relay to True.
+                manual_activation_flags[i] = True
                 print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
             else:
                 # If the button is not pressed (active HIGH), check if it's a watering day and the current time matches the watering time.
                 if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-                    if watering_duration_countdown[i] == 0:
+                    # Check if the relay is not manually activated (manual activation flag is False) before activating it automatically.
+                    if not manual_activation_flags[i] and watering_duration_countdown[i] == 0:
                         # If it's a watering day, the current time matches the watering time, and the watering hasn't started yet,
                         # activate the corresponding relay by setting its value to RELAY_ACTIVE.
                         relays[i].value = RELAY_ACTIVE
@@ -110,12 +116,14 @@ def control_relays():
                     # If it's not a watering day or the watering time does not match, set the corresponding relay value to RELAY_INACTIVE to turn off the relay.
                     relays[i].value = RELAY_INACTIVE
                     print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
+                    # Reset the manual activation flag for the relay to False.
+                    manual_activation_flags[i] = False
                     watering_duration_countdown[i] = 0  # Reset the watering duration countdown when not watering.
 
-            # Decrement the watering duration countdown for the current garden bed if it's greater than 0.
-            if watering_duration_countdown[i] > 0:
+            # Decrement the watering duration countdown for the current garden bed if it's greater than 0 and not manually activated.
+            if watering_duration_countdown[i] > 0 and not manual_activation_flags[i]:
                 watering_duration_countdown[i] -= 1
 
         time.sleep(0.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
 
-        time.sleep(1)  # Add an additional second to slow the loop down for the processor.
+        time.sleep(1)   # Additional delay (1 second) to avoid rapid looping and reduce processor load.
