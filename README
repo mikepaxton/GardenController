@@ -1,0 +1,25 @@
+
+Basic Function Goals:
+1 - Use a Raspberry Pico to control the system.
+2 - Use 12v solenoid valve, one for each bed.
+3 - Use solar setup to run the system. (Maybe tie into chicken coop solar setup)
+4 - Allow for manually turning on each garden bed valve.
+5 - Use an LED to visual display a valve is turned on. (I don't think I have enough GPIO pins)
+
+Advanced Function Goals:
+1 - Automated garden watering system for my 8 garden beds.
+2 - Allow for wireless control using Pico W
+3 - Build a basic webpage which can control and monitor the status of system.
+4 - Use Bluetooth soil moisture meters to determine if watering is needed.
+5 - Use a water flow meter to determine how much water is being used and a daily and monthly bases.
+
+TODO: The current set_rtc_datetime function grabs unixtime, raw_offset and DST (daylight savings) to calculate and
+ set the real time clock built into the Pico. It would be nice to just grab datetime and find a way to parse and format
+ the variable.  Would make the code much cleaner.
+TODO: Create a scheduling system so we can water on set days of the week.
+TODO: Create a web interface of some sort which will allow us to modify the schedule and/or turn on/off relays.
+
+How the system should function:
+Each garden bed will have its own 12v solenoid and a button to activate/deactivate it.
+
+Current Time Format: struct_time(tm_year=2023, tm_mon=8, tm_mday=6, tm_hour=17, tm_min=51, tm_sec=40, tm_wday=6, tm_yday=218, tm_isdst=-1)
