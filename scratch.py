@@ -1,7 +1,52 @@
-# ... (rest of the code remains the same)
+import os, ssl, wifi, socketpool, adafruit_requests, ipaddress
+import board
+import time
+from digitalio import DigitalInOut, Direction, Pull
+import rtc
+import circuitpython_schedule as schedule
+
+
+# Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
+RELAY_ACTIVE = False
+RELAY_INACTIVE = True
+
+# GPIO Pin Definitions in lists
+relay_pins = [board.GP0, board.GP1, board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
+button_pins = [board.GP8, board.GP9, board.GP10, board.GP11, board.GP12, board.GP13, board.GP14, board.GP15]
+
+# Create Lists "relays" and "buttons".  Define the directions of both and set the relay's at startup to inactive.
+relays = [DigitalInOut(pin) for pin in relay_pins]
+buttons = [DigitalInOut(pin) for pin in button_pins]
+
+# Set the relays as output and set them to inactive or off.
+for relay in relays:
+    relay.direction = Direction.OUTPUT
+    relay.value = RELAY_INACTIVE
+
+for button in buttons:
+    button.direction = Direction.INPUT
+    button.pull = Pull.UP
+
+# Define the socket pool as a global variable at the module level.
+pool = None
+
+def wifi_connect():
+    print("Connecting to WiFi...")
+    # Connect to your Wi-Fi network using the provided SSID and password
+    wifi.radio.connect(os.getenv('CIRCUITPY_WIFI_SSID'), os.getenv('CIRCUITPY_WIFI_PASSWORD'))
+    print("Connected to WiFi")
+    print("My IP address is", wifi.radio.ipv4_address)
+
+def turn_off_wifi():
+    wifi.radio.disconnect()
+
+def get_world_time():
+    # ... (previous code remains the same)
+
+def set_rtc_datetime():
+    # ... (previous code remains the same)
 
 # Define the watering schedule for each garden bed as described in the previous response.
-# Make sure to follow the day index (0 to 6) where 0 is Monday, 1 is Tuesday, and so on, up to 6 for Sunday.
 garden_bed_schedule = [
     [0, 1, 2, 3, 4, 5, 6],  # Garden Bed 1 (Every day)
     [0, 2, 4],  # Garden Bed 2 (Monday, Wednesday, Friday)
@@ -14,8 +59,6 @@ garden_bed_schedule = [
 ]
 
 # Define the watering time and duration for each garden bed (hour, minute, duration in minutes).
-# For example, the first garden bed (index 0) will be watered at 7:00 AM for 10 minutes (hour=7, minute=0, duration=10),
-# the second garden bed (index 1) will be watered at 12:30 PM for 15 minutes (hour=12, minute=30, duration=15), and so on.
 watering_times = [
     (7, 0, 10),    # Garden Bed 1 watering time (7:00 AM for 10 minutes)
     (12, 30, 15),  # Garden Bed 2 watering time (12:30 PM for 15 minutes)
@@ -27,16 +70,14 @@ watering_times = [
     (11, 0, 10),   # Garden Bed 8 watering time (11:00 AM for 10 minutes)
 ]
 
-def is_watering_day(garden_bed_index, current_day):
-    # Check if the current day is in the watering schedule for the specified garden bed.
-    return current_day in garden_bed_schedule[garden_bed_index]
-
-def is_watering_time(garden_bed_index, current_time):
-    # Check if the current time matches the watering time for the specified garden bed.
-    return current_time[:2] == watering_times[garden_bed_index][:2]
-
 # Create a list to store the watering duration countdown for each garden bed, initialized to 0 (not watering).
 watering_duration_countdown = [0] * len(watering_times)
+
+def is_watering_day(garden_bed_index, current_day):
+    # ... (previous code remains the same)
+
+def is_watering_time(garden_bed_index, current_time):
+    # ... (previous code remains the same)
 
 def control_relays():
     # This function continuously monitors the state of the relay buttons and controls the corresponding relays.
@@ -77,6 +118,4 @@ def control_relays():
 
         time.sleep(0.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
 
-        time.sleep(1)   # Additional delay (1 second) to avoid rapid looping and reduce processor load.
-
-# ... (rest of the code remains the same)
+        time.sleep(1)  # Add an additional second to slow the loop down for the processor.
