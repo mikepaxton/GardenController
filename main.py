@@ -1,23 +1,27 @@
 """
-******************* NOTE:  This code is by no means done.  It is a work in progress.
-******************* Most of the time I only commit working code to GitHub but there still is a chance some of the
-******************* code may fail.  I don't always have time to check the code in a working environment.
+****************************************************************************************************************
+NOTE:  This code is by no means done.  It is a work in progress.
+Most of the time I only commit working code to GitHub but there still is a chance some of the code may fail.
+I don't always have time to check the code in a working environment.
+****************************************************************************************************************
+
 Author: Mike Paxton
 Creation Date: 08/07/2023
-CircuitPython Version 8.2
+CircuitPython Version 8.2.2
 
-The purpose of this program is to control 8 relays, one for each of my garden beds using a Raspberry Pico and
-CircuitPython.  The system is being designed to work off of a solar system.
+The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
+CircuitPython.  The system is being designed to work off a solar system so controlling battery usage is paramount.
 
-I'm using an 8 channel relay along with 8 buttons to control each channel.
+I'm using an 8 channel relay along with 8 buttons to control each relay channel.
 
 I've incorporated a simple automated scheduling system which allows for specifying the days of the week, time of day
 and duration each garden bed relay runs.  Currently, each garden bed relay can only run once per day using the
 automated scheduling.  However, you can always use the manual button to activate a relay and let it run the desired
 amount of time, then manually turn it off.
+
 A Pause Schedule Button has been added which when pressed will put the automated scheduling system on hold. This works
 great for days when it's raining, and you don't want the system to run.
-You can still use the manual relay buttons to run any off the relays while scheduling is paused.
+You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
 
 """
@@ -62,6 +66,14 @@ for button in buttons:
 
 # Define the socket pool as a global variable at the module level+
 pool = None
+
+# Define the GPIO pin for the pause button.
+# Change the pin number (GP16) to match the pin you are using for the new button.
+pause_schedule_button = DigitalInOut(board.GP16)
+
+# Set the new button as input and enable internal pull-up resistor.
+pause_schedule_button.direction = Direction.INPUT
+pause_schedule_button.pull = Pull.UP
 
 
 def wifi_connect():
@@ -167,14 +179,6 @@ watering_duration_countdown = [0] * len(watering_times)
 # Create a list to store the manual activation flag for each relay, initialized to False (not manually activated).
 manual_activation_flags = [False] * len(relays)
 
-# Define the GPIO pin for the new button.
-# Change the pin number (GP16) to match the pin you are using for the new button.
-pause_schedule_button = DigitalInOut(board.GP16)
-
-# Set the new button as input and enable internal pull-up resistor.
-pause_schedule_button.direction = Direction.INPUT
-pause_schedule_button.pull = Pull.UP
-
 
 def is_watering_day(garden_bed_index, current_day):
     # Check if the current day is included in the watering schedule for the specified garden bed.
@@ -200,7 +204,7 @@ def control_relays():
         for i, manual_button_state in enumerate(buttons):
             # Check if the button has been pressed (active LOW), indicating that the relay should be activated manually.
             if not manual_button_state.value:
-                time.sleep(.02)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
+                time.sleep(.02)  # Introduce a small delay (0.02 seconds) for debounce and smoother button handling.
                 # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
                 relays[i].value = RELAY_ACTIVE
                 # Set the manual activation flag for the relay to True.
@@ -210,7 +214,7 @@ def control_relays():
             else:
                 # Check if the pause_schedule_button is not pressed (active HIGH) to proceed with automated scheduling.
                 if pause_schedule_button.value:
-                    time.sleep(.02)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
+                    time.sleep(.02)  # Introduce a small delay (0.02 seconds) for debounce and smoother button handling.
                     print("Scheduling active")
                     if is_watering_day(i, current_day) and is_watering_time(i, current_time):
                         # Check if the relay is not manually activated (manual activation flag is False) before
