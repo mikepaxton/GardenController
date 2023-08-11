@@ -29,6 +29,9 @@ import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc
 
+# Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
+debug = False
+
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
 # RELAY_ACTIVE is used to indicate that a relay is turned on or activated.
@@ -43,13 +46,13 @@ RELAY_INACTIVE = True
 
 # Define the GPIO pins for controlling the relays and reading the button states using lists.
 # The first relay in the relay_pins list is associated with the first button in the button_pins list,
-# the second relay with the second button, and so on. This organization allows you to easily map buttons to specific 
+# the second relay with the second button, and so on. This organization allows you to easily map buttons to specific
 # relays for control and monitoring purposes.
 relay_pins = [board.GP0, board.GP1, board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
 button_pins = [board.GP8, board.GP9, board.GP10, board.GP11, board.GP12, board.GP13, board.GP14, board.GP15]
 
 
-# Create DigitalInOut instances for each GPIO pin in 'relay_pins' and 'button_pin' to control the corresponding 
+# Create DigitalInOut instances for each GPIO pin in 'relay_pins' and 'button_pin' to control the corresponding
 # relays and buttons.
 relays = [DigitalInOut(pin) for pin in relay_pins]
 buttons = [DigitalInOut(pin) for pin in button_pins]
@@ -78,13 +81,13 @@ pause_schedule_button.pull = Pull.UP
 
 def wifi_connect():
     # Display status message indicating the Wi-Fi connection process.
-    print("Connecting to WiFi...")
+    if debug: print("Connecting to WiFi...")
     # Connect to the Wi-Fi network using the SSID and password retrieved from environment variables.
     wifi.radio.connect(os.getenv('CIRCUITPY_WIFI_SSID'), os.getenv('CIRCUITPY_WIFI_PASSWORD'))
     # Display confirmation message upon successful connection.
-    print("Connected to WiFi")
+    if debug: print("Connected to WiFi")
     # Display the IP address assigned to the device by the Wi-Fi network.
-    print("My IP address is", wifi.radio.ipv4_address)
+    if debug: print("My IP address is", wifi.radio.ipv4_address)
 
 
 def get_local_time():
@@ -99,7 +102,7 @@ def get_local_time():
     timezone = "America/Los_Angeles"  # Change your timezone to match.
     url = url + timezone
     # Display a message indicating the URL being accessed.
-    print(f"Accessing URL \n{url}")
+    if debug: print(f"Accessing URL \n{url}")
     # Send a GET request to the URL and retrieve JSON data containing world time information.
     response = request.get(url)
     json_data = response.json()
@@ -113,7 +116,7 @@ def get_local_time():
     # Determine if Daylight Saving Time (DST) is in effect.
     dst_active = bool(json_data.get("dst", False))
     # Display whether DST is active.
-    print(f"Is DST Active: {dst_active}")
+    if debug: print(f"Is DST Active: {dst_active}")
     # Adjust the location time for daylight savings time if applicable.
     if dst_active:
         location_time += dst_offset
@@ -131,9 +134,9 @@ def set_rtc_datetime():
     clock.datetime = time.struct_time(current_time)
     # Display the current date and time that has been set in the RTC.
     current_date_time = clock.datetime
-    print(f"Current Time: {current_date_time}")
+    if debug: print(f"Current Time: {current_date_time}")
     # Format and print the current time in a human-readable format.
-    print(f"Printable Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
+    if debug: print(f"Printable Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
 
 
 def uptime():
@@ -163,7 +166,7 @@ garden_bed_schedule = [
 # Define the watering time and duration for each garden bed using tuples: (hour, minute, duration in minutes).
 # Times are in 24hr format, 6,10 is 6:10am, 13:45 is 1:45pm and so on.
 watering_times = [
-    (9, 40, 1),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
+    (16, 19, 1),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
     (9, 40, 1),  # Garden Bed 2 watering time (12:30 PM for 15 minutes)
     (9, 22, 1),  # Garden Bed 3 watering time (3:45 PM for 8 minutes)
     (6, 4, 1),  # Garden Bed 4 watering time (10:15 AM for 12 minutes)
@@ -172,12 +175,6 @@ watering_times = [
     (6, 7, 1),  # Garden Bed 7 watering time (9:30 AM for 15 minutes)
     (6, 8, 1),  # Garden Bed 8 watering time (11:00 AM for 10 minutes)
 ]
-
-# Create a list to store the watering duration countdown for each garden bed, initialized to 0 (not watering).
-watering_duration_countdown = [0] * len(watering_times)
-
-# Create a list to store the manual activation flag for each relay, initialized to False (not manually activated).
-manual_activation_flags = [False] * len(relays)
 
 
 def is_watering_day(garden_bed_index, current_day):
@@ -192,68 +189,83 @@ def is_watering_time(garden_bed_index, current_time):
     return current_time[:2] == watering_times[garden_bed_index][:2]
 
 
-def control_relays():
-    while True:  # Continue looping indefinitely
-        current_date_time = rtc.RTC().datetime  # Get the current date and time from Pico's built-in RTC.
-        # Get the day of the week (0 to 6, where 0 is Monday and 6 is Sunday) from the current_date_time.
+# Define variables for the main loop.
+manual_activation_flags = [False] * len(relays)  # When relay is manually activated set this flag for that relay
+end_time_duration = [0] * len(watering_times)  # When a relay is activated due to schedule set its end of run time
+schedule_running = [False] * len(relays)  # When a relay is activated due to schedule set its schedule running flag
+
+
+def main():
+
+    wifi_connect()  # Connect to the WiFi network.
+    set_rtc_datetime()  # Set the Pico's Real Time Clock with current date and time.
+
+    while True:  # Continuously loop to monitor and manage relay control and scheduling.
+        # Get the current date and time from the Pico's built-in RTC.
+        current_date_time = rtc.RTC().datetime
+        # Determine the day of the week (0 to 6, where 0 is Monday and 6 is Sunday).
         current_day = current_date_time.tm_wday
-        # Get the current time as a tuple (hour, minute) from the current_date_time.
+        # Extract the current time as a tuple (hour, minute) from the current_date_time.
         current_time = (current_date_time.tm_hour, current_date_time.tm_min)
 
-        # Loop through each relay and button to control the relays
+        # Loop through each relay and its associated manual button to control the relays.
         for i, manual_button_state in enumerate(buttons):
-            # Check if the button has been pressed (active LOW), indicating that the relay should be activated manually.
+            # Check if the manual button is pressed (active LOW), indicating manual relay activation.
             if not manual_button_state.value:
-                time.sleep(.02)  # Introduce a small delay (0.02 seconds) for debounce and smoother button handling.
+                time.sleep(.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
                 # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
                 relays[i].value = RELAY_ACTIVE
                 # Set the manual activation flag for the relay to True.
                 manual_activation_flags[i] = True
-                print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
-
+                if debug: print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
             else:
-                # Check if the pause_schedule_button is not pressed (active HIGH) to proceed with automated scheduling.
-                if pause_schedule_button.value:
-                    time.sleep(.02)  # Introduce a small delay (0.02 seconds) for debounce and smoother button handling.
-                    print("Scheduling active")
-                    if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-                        # Check if the relay is not manually activated (manual activation flag is False) before
-                        # activating it automatically.
-                        if not manual_activation_flags[i] and watering_duration_countdown[i] == 0:
-                            # If it's a watering day, the current time matches the watering time, and the watering
-                            # hasn't started yet, activate the corresponding relay by setting its value to RELAY_ACTIVE.
-                            relays[i].value = RELAY_ACTIVE
-                            print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
-                            # Set the watering duration countdown in seconds based on the specified duration in minutes.
-                            watering_duration_countdown[i] = watering_times[i][2] * 60
-
-                    else:
-                        # Runs after a scheduled active relays duration ends.
-                        relays[i].value = RELAY_INACTIVE
-                        print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
-                        # Reset the manual activation flag for the relay to False.
-                        manual_activation_flags[i] = False
-                        watering_duration_countdown[i] = 0  # Reset the watering duration countdown when not watering.
-
-                    # Decrement the watering duration countdown for the current garden bed if it's greater than 0
-                    # and not manually activated.
-                    if watering_duration_countdown[i] > 0 and not manual_activation_flags[i]:
-                        watering_duration_countdown[i] -= 1
-                else:
-                    # If the pause_schedule_button is pressed, turn off the relay regardless of scheduling.
+                # If the manual button is not pressed.
+                if not schedule_running[i]:  # We may have relay running under a schedule and don't want to turn it off.
+                    # Deactivate the relay.
                     relays[i].value = RELAY_INACTIVE
-                    print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
                     # Reset the manual activation flag for the relay to False.
                     manual_activation_flags[i] = False
-                    watering_duration_countdown[i] = 0  # Reset the watering duration countdown when not watering.
+                    if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
-        uptime()
-        time.sleep(1)  # Additional delay (1 second) to avoid rapid looping and reduce processor load.
+            # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
+        if pause_schedule_button.value:
+            time.sleep(.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
+            print("Scheduling active")
+            # Iterate through each relay to determine automated scheduling.
+            for i in range(len(relays)):
+                if is_watering_day(i, current_day) and is_watering_time(i, current_time):
+                    # Check if the relay is not manually activated and the schedule hasn't started yet.
+                    if not manual_activation_flags[i] and end_time_duration[i] == 0:
+                        # Activate the relay and calculate the end time for the scheduled duration.
+                        relays[i].value = RELAY_ACTIVE
+                        end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
+                        schedule_running[i] = True  # Set the relay's schedule_running flag to True.
+                        if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
+                        if debug: print(f"End Time: {end_time_duration[i]}")
+                        if debug: print(f"Schedule Running Flag: {schedule_running}")
+
+                # Check if a watering schedule is currently running and if the end time has been reached.
+                if schedule_running[i] and end_time_duration[i] < int(time.monotonic()):
+                    # Deactivate the relay as the watering schedule has ended.
+                    relays[i].value = RELAY_INACTIVE
+                    # Update the schedule_running flag to indicate that the schedule has ended.
+                    schedule_running[i] = False
+                    end_time_duration[i] = 0
+
+        else:
+            # Handles cases when the pause_schedule_button is pressed.
+            for i in range(len(relays)):
+                if not manual_activation_flags[i]:
+                    # Deactivate the relay.
+                    relays[i].value = RELAY_INACTIVE
+                    # Reset the watering duration countdown when not watering.
+                    end_time_duration[i] = 0
+                    if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
+
+        # End of loop iteration.
 
 
-# Call these two functions to connect to the internet through your wifi network and set the Pico's Real Time Clock
-# with the current date and time.
-wifi_connect()
-set_rtc_datetime()
 # Call this function at boot start the automated scheduling as well as checking for manual button presses.
-control_relays()
+# Run the main function
+if __name__ == "__main__":
+    main()
