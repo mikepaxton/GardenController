@@ -1,4 +1,3 @@
-
 """
 ****************************************************************************************************************
 NOTE:  This code is by no means done.  It is a work in progress.
@@ -31,7 +30,7 @@ from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
-debug = False
+debug = True
 
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
@@ -79,16 +78,53 @@ pause_schedule_button = DigitalInOut(board.GP16)
 pause_schedule_button.direction = Direction.INPUT
 pause_schedule_button.pull = Pull.UP
 
+# Define onboard LED and set it to OUTPUT
+led = DigitalInOut(board.LED)
+led.direction = Direction.OUTPUT
 
-def wifi_connect():
-    # Display status message indicating the Wi-Fi connection process.
-    if debug: print("Connecting to WiFi...")
-    # Connect to the Wi-Fi network using the SSID and password retrieved from environment variables.
-    wifi.radio.connect(os.getenv('CIRCUITPY_WIFI_SSID'), os.getenv('CIRCUITPY_WIFI_PASSWORD'))
-    # Display confirmation message upon successful connection.
-    if debug: print("Connected to WiFi")
-    # Display the IP address assigned to the device by the Wi-Fi network.
-    if debug: print("My IP address is", wifi.radio.ipv4_address)
+
+# Used for creating a visual display of certain error messages
+# Currently only used for failed Wi-Fi connection. Flashes 5 times
+def flash_led(times, on_duration, off_duration):
+    for _ in range(times):
+        led.value = True  # Turn on the LED
+        time.sleep(on_duration)
+        led.value = False  # Turn off the LED
+        time.sleep(off_duration)
+
+
+def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
+    retries = 0
+
+    while retries < max_retries:
+        try:
+            # Display status message indicating the Wi-Fi connection process.
+            if debug: print(f"Connecting to WiFi (Attempt {retries + 1}/{max_retries})...")
+            if simulate_failure:
+                raise Exception("Simulated connection failure")  # Simulate a connection failure
+            # Connect to the Wi-Fi network using the SSID and password retrieved from environment variables.
+            wifi.radio.connect(os.getenv('CIRCUITPY_WIFI_SSID'), os.getenv('CIRCUITPY_WIFI_PASSWORD'))
+            # Display confirmation message upon successful connection.
+            if debug: print("Connected to WiFi")
+            # Turn off the LED to indicate successful connection.
+            led.value = False
+            # Display the IP address assigned to the device by the Wi-Fi network.
+            if debug: print("My IP address is", wifi.radio.ipv4_address)
+            return  # Exit the function on successful connection
+        except Exception as e:
+            # Display an error message if a connection attempt fails.
+            if debug: print(f"Error: Failed to connect to WiFi - {e}")
+            retries += 1
+            # Flash the LED five times fairly quickly to indicate connection failure.
+            flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
+            time.sleep(retry_interval)
+
+    # Display an error message if maximum retries are reached without successful connection.
+    if debug: print(f"Error: Unable to establish a WiFi connection after {max_retries} attempts.")
+    # Flash the LED five times fairly quickly to indicate connection failure.
+    flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
+    time.sleep(1)  # Wait for 1 second before turning off the LED.
+    led.value = False  # Turn off the LED.
 
 
 def get_local_time():
@@ -167,7 +203,7 @@ garden_bed_schedule = [
 # Define the watering time and duration for each garden bed using tuples: (hour, minute, duration in minutes).
 # Times are in 24hr format, 6,10 is 6:10am, 13:45 is 1:45pm and so on.
 watering_times = [
-    (9, 40, 1),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
+    (16, 56, 1),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
     (9, 40, 1),  # Garden Bed 2 watering time (12:30 PM for 15 minutes)
     (9, 22, 1),  # Garden Bed 3 watering time (3:45 PM for 8 minutes)
     (6, 4, 1),  # Garden Bed 4 watering time (10:15 AM for 12 minutes)
@@ -176,11 +212,6 @@ watering_times = [
     (6, 7, 1),  # Garden Bed 7 watering time (9:30 AM for 15 minutes)
     (6, 8, 1),  # Garden Bed 8 watering time (11:00 AM for 10 minutes)
 ]
-
-# Create a list to store the manual activation flag for each relay, initialized to False (not manually activated).
-manual_activation_flags = [False] * len(relays)
-end_time_duration = [0] * len(watering_times)
-schedule_running = [False] * len(relays)
 
 
 def is_watering_day(garden_bed_index, current_day):
@@ -195,80 +226,114 @@ def is_watering_time(garden_bed_index, current_time):
     return current_time[:2] == watering_times[garden_bed_index][:2]
 
 
-def main():
-    while True:  # Continue looping indefinitely
-        current_date_time = rtc.RTC().datetime  # Get the current date and time from Pico's built-in RTC.
-        # Get the day of the week (0 to 6, where 0 is Monday and 6 is Sunday) from the current_date_time.
-        current_day = current_date_time.tm_wday
-        # Get the current time as a tuple (hour, minute) from the current_date_time.
-        current_time = (current_date_time.tm_hour, current_date_time.tm_min)
+# Define variables for the main loop.
+manual_activation_flags = [False] * len(relays)  # When relay is manually activated set this flag for that relay
+end_time_duration = [0] * len(watering_times)  # When a relay is activated due to schedule set its end of run time
+schedule_running = [False] * len(relays)  # When a relay is activated due to schedule set its schedule running flag
 
-        # Loop through each relay and button to control the relays
-        for i, manual_button_state in enumerate(buttons):
-            # Check if the button has been pressed (active LOW), indicating that the relay should be activated manually.
-            if not manual_button_state.value:
-                time.sleep(.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
-                # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
-                relays[i].value = RELAY_ACTIVE
-                # Set the manual activation flag for the relay to True.
-                manual_activation_flags[i] = True
-                if debug: print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
-            else:
-                # If the manual button is not pressed.
+
+def check_manual_button():
+    # Loop through each relay and its associated manual button to control the relays.
+    for i, manual_button_state in enumerate(buttons):
+        # Check if the manual button is pressed (active LOW), indicating manual relay activation.
+        if not manual_button_state.value:
+            time.sleep(.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
+            # Activate the corresponding relay by setting its value to RELAY_ACTIVE.
+            relays[i].value = RELAY_ACTIVE
+            # Set the manual activation flag for the relay to True.
+            manual_activation_flags[i] = True
+            if debug: print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
+        else:
+            # If the manual button is not pressed.
+            if not schedule_running[i]:  # We may have relay running under a schedule and don't want to turn it off.
+                # Deactivate the relay.
                 relays[i].value = RELAY_INACTIVE
-                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
                 # Reset the manual activation flag for the relay to False.
                 manual_activation_flags[i] = False
+                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
-            # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
-            if not pause_schedule_button.value:
-                time.sleep(.1)  # Introduce a small delay (0.1 seconds) for debounce and smoother button handling.
-                print("Scheduling active")
-                if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-                    # Check if the relay is not manually activated (manual activation flag is False) before
-                    # activating it automatically.
-                    if not manual_activation_flags[i] and end_time_duration[i] == 0:
-                        # If it's a watering day, the current time matches the watering time, and the watering
-                        # hasn't started yet, activate the corresponding relay by setting its value to RELAY_ACTIVE.
-                        relays[i].value = RELAY_ACTIVE
-                        if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
-                        # Calculate the end time for the scheduled relay based off of the watering_times list
-                        # in minutes plus the current monotonic time of the Pico.
-                        end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
-                        schedule_running[i] = True  # Set the relay in "i" to running in schedule.
+
+def main():
+    try:
+
+        # Attempt to establish a Wi-Fi connection with a maximum of 3 retries and a 10-second interval between each attempt.
+        # To simulate a connection failure, set simulate_failure to True, which will trigger LED flashing on the Pico board.
+        wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)
+        set_rtc_datetime()  # From the Internet get current local day of week and time and update RTC
+
+        while True:  # Continuously loop to monitor and manage relay control and scheduling.
+            try:
+                if debug: print("Entering main loop...")
+
+                # Every loop iteration get current time and day of the week from Pico RTC for checking scheduled
+                # watering days and times.
+                current_date_time = rtc.RTC().datetime
+                current_day = current_date_time.tm_wday
+                current_time = (current_date_time.tm_hour, current_date_time.tm_min)
+
+                # Define a list of weekday names for debug printing use
+                weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                if debug: print("Current day:", current_day, "(", weekday_names[current_day], ")")
+                if debug: print("Current time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
+
+                check_manual_button()  # Check for any manual buttons being pushed
+
+                # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
+                if pause_schedule_button.value:
+                    print("Scheduling active")
+                    # Iterate through each relay to determine automated scheduling.
+                    for i in range(len(relays)):
+                        if is_watering_day(i, current_day) and is_watering_time(i, current_time):
+                            # Check if the relay is not manually activated and the schedule hasn't started yet.
+                            if not manual_activation_flags[i] and end_time_duration[i] == 0:
+                                # Activate the relay and calculate the end time for the scheduled duration.
+                                relays[i].value = RELAY_ACTIVE
+                                end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
+                                schedule_running[i] = True  # Set the relay's schedule_running flag to True.
+                                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
+                                if debug:print(f"End Time: {end_time_duration[i]}")
+                                if debug: print(f"Schedule Running Flag: {schedule_running}")
+                            else:
+                                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} On")  # Just for debug purposes
+
+                        # Check if a watering schedule is currently running and if the end time has been reached.
+                        if schedule_running[i] and end_time_duration[i] < int(time.monotonic()):
+                            # Deactivate the relay as the watering schedule has ended.
+                            relays[i].value = RELAY_INACTIVE
+                            # Update the schedule_running flag to indicate that the schedule has ended.
+                            schedule_running[i] = False
+                            end_time_duration[i] = 0
 
                 else:
-                    # Runs after a scheduled active relays duration ends.
-                    relays[i].value = RELAY_INACTIVE
-                    if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
-                    end_time_duration[i] = 0  # Reset the watering duration countdown when not watering.
+                    if debug: print("Scheduling paused")
+                    # Handles cases when the pause_schedule_button is pressed.
+                    for i in range(len(relays)):
+                        if not manual_activation_flags[i]:  # We don't want to turn off a manually activated relay
+                            # Deactivate the relay.
+                            relays[i].value = RELAY_INACTIVE
+                            # if a relays were running on a schedule and then the schedule was turned off we need to
+                            # reset those active relays scheduled flag and end time.
+                            schedule_running[i] = False
+                            end_time_duration[i] = 0
+                            if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
-                # Check if a watering schedule is currently running for the relay at index 'i' and if the
-                # end time of the schedule has been reached based on the value stored in 'end_time_duration[i]'.
-                if schedule_running[i] and end_time_duration[i] < int(time.monotonic()):
-                    # Deactivate the relay by setting its value to RELAY_INACTIVE.
-                    relays[i].value = RELAY_INACTIVE
-                    # Update the schedule_running flag to indicate that the watering schedule has ended.
-                    schedule_running[i] = False
-                    end_time_duration[i] = 0
+                time.sleep(1)  # Add a short delay to prevent tight loop
 
-            else:
-                # If the pause_schedule_button is pressed, turn off the relay regardless of scheduling.
-                relays[i].value = RELAY_INACTIVE
-                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
-                # Reset the manual activation flag for the relay to False.
-                manual_activation_flags[i] = False
-                end_time_duration[i] = 0  # Reset the watering duration countdown when not watering.
+            except Exception as main_loop_error:
+                # Handle errors that occur in the main loop.
+                print(f"Main Loop Error: {main_loop_error}")
+                # Flash the LED three times to indicate a main loop error.
+                flash_led(3, 0.1, 0.1)
+                time.sleep(1)  # Wait for 1 second before continuing.
 
-        uptime()
-        time.sleep(1)  # Additional delay (1 second) to avoid rapid looping and reduce processor load.
+    except Exception as main_error:
+        # Handle errors that occur before entering the main loop.
+        print(f"Main Error: {main_error}")
+        # Flash the LED five times to indicate a main error.
+        flash_led(5, 0.1, 0.1)
+        time.sleep(1)  # Wait for 1 second before exiting.
 
 
-# Call these two functions to connect to the internet through your wifi network and set the Pico's Real Time Clock
-# with the current date and time.
-wifi_connect()
-set_rtc_datetime()
-# Call this function at boot start the automated scheduling as well as checking for manual button presses.
-# Run the main function
+# Call the main function
 if __name__ == "__main__":
     main()
