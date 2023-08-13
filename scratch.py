@@ -28,6 +28,7 @@ You can still use the manual relay buttons to run any of the relays while schedu
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc
+import json
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
 debug = True
@@ -67,8 +68,6 @@ for button in buttons:
     button.direction = Direction.INPUT
     button.pull = Pull.UP
 
-# Define the socket pool as a global variable at the module level+
-pool = None
 
 # Define the GPIO pin for the pause button.
 # Change the pin number (GP16) to match the pin you are using for the new button.
@@ -125,6 +124,10 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
     flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
     time.sleep(1)  # Wait for 1 second before turning off the LED.
     led.value = False  # Turn off the LED.
+
+
+# Define the socket pool as a global variable at the module level+
+pool = None
 
 
 def get_local_time():
@@ -187,31 +190,26 @@ def uptime():
     print(f"Current Uptime: {uptime_hours} hours, {uptime_minutes} minutes, {uptime_seconds} seconds")
 
 
-# Define the watering schedule for each garden bed, where each sublist corresponds to a garden bed's watering days.
-# The indices of the sublist represent days of the week (0 = Monday, 6 = Sunday).
-garden_bed_schedule = [
-    [0, 1, 2, 3, 4, 5, 6],  # Garden Bed 1 (Every day)
-    [0, 2, 4],  # Garden Bed 2 (Monday, Wednesday, Friday)
-    [0, 3, 5],  # Garden Bed 3 (Tuesday, Thursday, Saturday)
-    [0, 3, 6],  # Garden Bed 4 (Monday, Thursday, Sunday)
-    [1, 4],  # Garden Bed 5 (Tuesday, Friday)
-    [3, 5],  # Garden Bed 6 (Wednesday, Saturday)
-    [0],  # Garden Bed 7 (Monday only)
-    [1],  # Garden Bed 8 (Tuesday only)
-]
+# Initialize global variables for schedule data and last modified timestamp
+garden_bed_schedule = {}
+watering_times = {}
+last_modified_timestamp = 0
 
-# Define the watering time and duration for each garden bed using tuples: (hour, minute, duration in minutes).
-# Times are in 24hr format, 6,10 is 6:10am, 13:45 is 1:45pm and so on.
-watering_times = [
-    (16, 56, 1),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
-    (9, 40, 1),  # Garden Bed 2 watering time (12:30 PM for 15 minutes)
-    (9, 22, 1),  # Garden Bed 3 watering time (3:45 PM for 8 minutes)
-    (6, 4, 1),  # Garden Bed 4 watering time (10:15 AM for 12 minutes)
-    (6, 5, 1),  # Garden Bed 5 watering time (8:30 AM for 20 minutes)
-    (6, 6, 1),  # Garden Bed 6 watering time (4:00 PM for 10 minutes)
-    (6, 7, 1),  # Garden Bed 7 watering time (9:30 AM for 15 minutes)
-    (6, 8, 1),  # Garden Bed 8 watering time (11:00 AM for 10 minutes)
-]
+
+def load_schedule_data():
+    global garden_bed_schedule, watering_times, last_modified_timestamp
+    # Get the current modified timestamp of the JSON file
+    current_modified_timestamp = os.path.getmtime('Water_Schedule.json')
+
+    # Check if the JSON file has been modified since the last load
+    if current_modified_timestamp != last_modified_timestamp:
+        # Load the schedule data from the JSON file
+        with open('Water_Schedule.json', 'r') as file:
+            schedule_data = json.load(file)
+
+        garden_bed_schedule = schedule_data['garden_bed_schedule']
+        watering_times = schedule_data['watering_times']
+        last_modified_timestamp = current_modified_timestamp
 
 
 def is_watering_day(garden_bed_index, current_day):
@@ -253,7 +251,10 @@ def check_manual_button():
                 if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
 
-def main():
+# -----------------------------------------------------------------------------
+# Main Loop and Schedule Control
+# -----------------------------------------------------------------------------
+def main_loop():
     try:
 
         # Attempt to establish a Wi-Fi connection with a maximum of 3 retries and a 10-second interval between each attempt.
@@ -262,6 +263,7 @@ def main():
         set_rtc_datetime()  # From the Internet get current local day of week and time and update RTC
 
         while True:  # Continuously loop to monitor and manage relay control and scheduling.
+
             try:
                 if debug: print("Entering main loop...")
 
@@ -271,12 +273,13 @@ def main():
                 current_day = current_date_time.tm_wday
                 current_time = (current_date_time.tm_hour, current_date_time.tm_min)
 
+                check_manual_button()  # Check for any manual buttons being pushed on each loop iteration
+                load_schedule_data()  # Load the watering schedule data on each loop iteration
+
                 # Define a list of weekday names for debug printing use
                 weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
                 if debug: print("Current day:", current_day, "(", weekday_names[current_day], ")")
                 if debug: print("Current time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
-
-                check_manual_button()  # Check for any manual buttons being pushed
 
                 # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
                 if pause_schedule_button.value:
@@ -334,6 +337,6 @@ def main():
         time.sleep(1)  # Wait for 1 second before exiting.
 
 
-# Call the main function
 if __name__ == "__main__":
-    main()
+    # Call the main loop
+    main_loop()
