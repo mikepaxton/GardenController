@@ -1,17 +1,65 @@
+Garden Control System with Raspberry Pi Pico and CircuitPython
 
-Basic Function Goals:
-1 - Use a Raspberry Pico to control the system.
-2 - Use 12v solenoid valve, one for each bed.
-3 - Use solar setup to run the system. (Maybe tie into chicken coop solar setup)
-4 - Allow for manually turning on each garden bed valve.
-5 - Use an LED to visual display a valve is turned on/off.  The relay board has its own LED for each relay.
+Author: Mike Paxton
+Creation Date: 08/12/2023
+CircuitPython Version: 8.2.2
 
-Advanced Function Goals:
-1 - Automated garden watering system for my 8 garden beds.
-2 - Allow for wireless control using Pico W
-3 - Build a basic webpage which can control and monitor the status of system.
-4 - Use Bluetooth soil moisture meters to determine if watering is needed.
-5 - Use a water flow meter to determine how much water is being used and a daily and monthly bases.
+Introduction
+
+The Garden Control System is designed to efficiently manage the watering of up to 8 garden beds using a
+Raspberry Pi Pico microcontroller and CircuitPython. This system is particularly suitable for solar-powered
+setups where conserving battery usage is crucial. It incorporates both automated scheduling and manual control
+options, ensuring optimal watering conditions for your garden beds.
+
+Features
+
+Automated Scheduling: The system supports automated scheduling for each garden bed. You can specify the days of the week
+and the times when each bed should be watered. The watering schedule is stored in the Water_Schedule.json file in JSON format.
+Manual Control: Each garden bed is equipped with a dedicated button, allowing you to manually activate the watering
+process for individual beds. This feature is helpful for immediate watering needs.
+Pause Schedule: The system includes a "Pause Schedule" button that temporarily suspends the automated watering schedule.
+This is useful for rainy days or when you prefer manual control.
+Onboard LED Indicator: The Raspberry Pi Pico's onboard LED provides visual feedback about system status, such as Wi-Fi
+connection and errors.
+
+Installation and Setup
+
+Clone the Repository: Clone this repository to your local machine using Git or by downloading the ZIP archive.
+Circuit Setup: Connect the Raspberry Pi Pico to the relay modules and buttons according to the GPIO pin assignments
+specified in the code.
+Wi-Fi Configuration: Modify the CIRCUITPY_WIFI_SSID and CIRCUITPY_WIFI_PASSWORD environment variables in the code to
+match your Wi-Fi network credentials.
+JSON Schedule: Update the Water_Schedule.json file with your desired watering schedule. The file is organized with
+each garden bed's schedule and watering times.
+
+Installation and Setup
+
+Clone the Repository: Clone this repository to your local machine using Git or by downloading the ZIP archive.
+Circuit Setup: Connect the Raspberry Pi Pico to the relay modules and buttons according to the GPIO pin assignments
+specified in the code.
+Wi-Fi Configuration: Modify the CIRCUITPY_WIFI_SSID and CIRCUITPY_WIFI_PASSWORD environment variables in the code to
+match your Wi-Fi network credentials.
+JSON Schedule: Update the Water_Schedule.json file with your desired watering schedule. The file is organized with each
+garden bed's schedule and watering times.
+
+Usage
+
+Automated Scheduling: The system will automatically water the garden beds based on the schedule specified in the
+Water_Schedule.json file. Beds will be watered on the designated days and times.
+Manual Control: Press the corresponding button for a garden bed to manually activate its watering process. The manual
+activation flag will be set for the respective bed.
+Pause Schedule: Press the "Pause Schedule" button to halt the automated watering schedule. You can still use manual
+control during this pause.
+
+Troubleshooting
+
+If you encounter Wi-Fi connection issues, modify the wifi_connect function parameters in the code to adjust retry
+attempts and intervals.
+Ensure that the GPIO pins for relays and buttons are correctly connected to the Raspberry Pi Pico according to the
+provided assignments.
+Double-check the formatting of the Water_Schedule.json file to avoid errors in the watering schedule.
+
+Below this are my working notes for the system.  As this is a work in progress these notes will change over time.
 
 TODO: The current set_rtc_datetime function grabs unixtime, raw_offset and DST (daylight savings) to calculate and
  set the real time clock built into the Pico. It would be nice to just grab datetime and find a way to parse and format
@@ -21,6 +69,9 @@ TODO: Create a web interface of some sort which will allow us to modify the sche
 
 TODO: Look into using the Bluetooth soil moisture sensors the I purchased when switchdocs stopped selling
  raspberry pi project parts. It appears the currently CircuitPython does not support the Pico.  No libraries found.
+ I might be able to use Home Assistants built in ability to use Bluetooth/Wi-Fi devices and tie them in with the Pico
+ using HA conditions.  I'm pretty sure I saw a YouTube video doing just this with the Bluetooth
+ moisture sensors i'm using.
 
 
 How the system should function:
@@ -32,6 +83,14 @@ deep cycle battery inside the coop.  My goal is to run th 12v line in undergroun
 to the garden.  Since the garden is only in use during the summer months, my hope is that solar system will work for
 both projects.
 
+I want to integrate this garden system with Home Assistant which I will be running on my Synology Server as a Docker
+container.
+
+Goals for integration are:
+Allow me to manually turn on/off each garden bed from my phone via the Home Assistant iPhone app.
+Provide an easy way to setup each garden bed with the days of the week and times of day to run.
+Home Assistant will then connect to the Pico via the Pico's HTTP server and update the water_schedule.json file
+with the changes made each beds schedule.
 
 This is the format the Pico RTC uses for date/time
 Current Time Format: struct_time(tm_year=2023, tm_mon=8, tm_mday=6, tm_hour=17, tm_min=51, tm_sec=40, tm_wday=6, tm_yday=218, tm_isdst=-1)
@@ -45,31 +104,11 @@ tm_wday=
 5: Saturday
 6: Sunday
 
-# Examples of Garden Bed Scheduling
-# The indices of the sublist represent days of the week (0 = Monday, 6 = Sunday).
-garden_bed_schedule = [
-    [0, 1, 2, 3, 4, 5, 6],  # Garden Bed 1 (Every day)
-    [0, 2, 4],  # Garden Bed 2 (Monday, Wednesday, Friday)
-    [1, 3, 5],  # Garden Bed 3 (Tuesday, Thursday, Saturday)
-    [0, 3, 6],  # Garden Bed 4 (Monday, Thursday, Sunday)
-    [1, 4],  # Garden Bed 5 (Tuesday, Friday)
-    [3, 5],  # Garden Bed 6 (Wednesday, Saturday)
-    [0],  # Garden Bed 7 (Monday only)
-    [1],  # Garden Bed 8 (Tuesday only)
-]
-# Example of how to set watering times and durations
-# Define the watering time and duration for each garden bed using tuples: (hour, minute, duration in minutes).
-# Times are in 24hr format, 6,10 is 6:10am, 13:45 is 1:45pm and so on.
-watering_times = [
-    (7, 0, 10),  # Garden Bed 1 watering time (7:00 AM for 10 minutes)
-    (12, 30, 15),  # Garden Bed 2 watering time (12:30 PM for 15 minutes)
-    (15, 45, 8),  # Garden Bed 3 watering time (3:45 PM for 8 minutes)
-    (10, 15, 12),  # Garden Bed 4 watering time (10:15 AM for 12 minutes)
-    (8, 30, 20),  # Garden Bed 5 watering time (8:30 AM for 20 minutes)
-    (16, 0, 10),  # Garden Bed 6 watering time (4:00 PM for 10 minutes)
-    (9, 30, 15),  # Garden Bed 7 watering time (9:30 AM for 15 minutes)
-    (11, 0, 10),  # Garden Bed 8 watering time (11:00 AM for 10 minutes)
-]
+The program utilizes the watering schedule stored in the JSON file named "Water_Schedule.json" for each individual
+garden bed. This file is formatted in JSON and contains multiple days and corresponding times when watering should
+be initiated. The garden_bed_schedule variable empowers you to define which day(s) of the week each garden bed should
+be activated. Additionally, the watering_times variable provides the means to designate the specific time(s) during the
+day when each bed requires watering as well as the duration of the run time.
 
 The garden_bed_index is a parameter in the is_watering_day function that represents the index of a specific garden bed
 in the garden_bed_schedule list. It is used to determine whether the current day is a watering day for the
@@ -80,4 +119,20 @@ beds minus 1. It is used to specify which garden bed's watering schedule is bein
 
 For example, if you call is_watering_day(2, 3), it means you are checking whether Garden Bed 3 (0-based index) should
 be watered on the 3rd day of the week (Wednesday, since days are 0-based indices as well). The function would then look
- at the garden_bed_schedule list to determine if Garden Bed 3 should be watered on Wednesdays.
+at the garden_bed_schedule list to determine if Garden Bed 3 should be watered on Wednesdays.
+
+
+Important Notes
+
+The provided code is a work in progress and may require further refinement. Only tested and working portions are
+typically committed to GitHub.
+The system's reliance on Wi-Fi connection makes it suitable for environments with reliable network availability.
+
+Disclaimer
+
+This code is provided "as-is" without any warranty. It is intended for educational purposes and personal use.
+The author is not responsible for any consequences resulting from the use of this code.
+
+License
+
+This project is licensed under the MIT License
