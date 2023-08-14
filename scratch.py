@@ -188,8 +188,14 @@ def uptime():
     print(f"Current Uptime: {uptime_hours} hours, {uptime_minutes} minutes, {uptime_seconds} seconds")
 
 
+# Initialize scheduling data with empty lists
+garden_bed_schedule = []
+watering_times = []
+
+
 # Load schedule data from JSON file
 def load_schedule_data():
+    global garden_bed_schedule, watering_times  # Declare the global variables
     try:
         with open('Water_Schedule.json', 'r') as file:
             schedule_data = json.load(file)
@@ -204,8 +210,8 @@ def load_schedule_data():
         return [], []
 
 
-# Initialize scheduling data using JSON data
-garden_bed_schedule, watering_times = load_schedule_data()
+# Initialize scheduling data using JSON data for both is_watering_day and is_watering_time
+load_schedule_data()
 
 print(f"GardenBedSchedule: {garden_bed_schedule}")
 print(f"WateringTimes: {watering_times}")
