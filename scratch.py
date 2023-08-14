@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Creation Date: 08/07/2023
+Creation Date: 08/12/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -68,6 +68,8 @@ for button in buttons:
     button.direction = Direction.INPUT
     button.pull = Pull.UP
 
+# Define the socket pool as a global variable at the module level+
+pool = None
 
 # Define the GPIO pin for the pause button.
 # Change the pin number (GP16) to match the pin you are using for the new button.
@@ -124,10 +126,6 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
     flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
     time.sleep(1)  # Wait for 1 second before turning off the LED.
     led.value = False  # Turn off the LED.
-
-
-# Define the socket pool as a global variable at the module level+
-pool = None
 
 
 def get_local_time():
@@ -190,26 +188,27 @@ def uptime():
     print(f"Current Uptime: {uptime_hours} hours, {uptime_minutes} minutes, {uptime_seconds} seconds")
 
 
-# Initialize global variables for schedule data and last modified timestamp
-garden_bed_schedule = {}
-watering_times = {}
-last_modified_timestamp = 0
-
-
+# Load schedule data from JSON file
 def load_schedule_data():
-    global garden_bed_schedule, watering_times, last_modified_timestamp
-    # Get the current modified timestamp of the JSON file
-    current_modified_timestamp = os.path.getmtime('Water_Schedule.json')
-
-    # Check if the JSON file has been modified since the last load
-    if current_modified_timestamp != last_modified_timestamp:
-        # Load the schedule data from the JSON file
+    try:
         with open('Water_Schedule.json', 'r') as file:
             schedule_data = json.load(file)
+            garden_bed_schedule = []
+            watering_times = []
+            for bed_name, schedule_days in schedule_data["garden_bed_schedule"].items():
+                garden_bed_schedule.append(schedule_days)
+                watering_times.append(schedule_data["watering_times"][bed_name][0])
+            return garden_bed_schedule, watering_times
+    except Exception as e:
+        print(f"Error loading schedule data: {e}")
+        return [], []
 
-        garden_bed_schedule = schedule_data['garden_bed_schedule']
-        watering_times = schedule_data['watering_times']
-        last_modified_timestamp = current_modified_timestamp
+
+# Initialize scheduling data using JSON data
+garden_bed_schedule, watering_times = load_schedule_data()
+
+print(f"GardenBedSchedule: {garden_bed_schedule}")
+print(f"WateringTimes: {watering_times}")
 
 
 def is_watering_day(garden_bed_index, current_day):
@@ -251,10 +250,7 @@ def check_manual_button():
                 if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
 
-# -----------------------------------------------------------------------------
-# Main Loop and Schedule Control
-# -----------------------------------------------------------------------------
-def main_loop():
+def main():
     try:
 
         # Attempt to establish a Wi-Fi connection with a maximum of 3 retries and a 10-second interval between each attempt.
@@ -263,7 +259,6 @@ def main_loop():
         set_rtc_datetime()  # From the Internet get current local day of week and time and update RTC
 
         while True:  # Continuously loop to monitor and manage relay control and scheduling.
-
             try:
                 if debug: print("Entering main loop...")
 
@@ -273,13 +268,13 @@ def main_loop():
                 current_day = current_date_time.tm_wday
                 current_time = (current_date_time.tm_hour, current_date_time.tm_min)
 
-                check_manual_button()  # Check for any manual buttons being pushed on each loop iteration
-                load_schedule_data()  # Load the watering schedule data on each loop iteration
-
                 # Define a list of weekday names for debug printing use
                 weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
                 if debug: print("Current day:", current_day, "(", weekday_names[current_day], ")")
                 if debug: print("Current time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
+
+                check_manual_button()  # Check for any manual buttons being pushed
+                load_schedule_data()  # Reload schedule data
 
                 # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
                 if pause_schedule_button.value:
@@ -337,6 +332,6 @@ def main_loop():
         time.sleep(1)  # Wait for 1 second before exiting.
 
 
+# Call the main function
 if __name__ == "__main__":
-    # Call the main loop
-    main_loop()
+    main()
