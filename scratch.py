@@ -273,7 +273,7 @@ def check_manual_button():
             relays[i].value = RELAY_ACTIVE
             # Set the manual activation flag for the relay to True.
             manual_activation_flags[i] = True
-            if debug: print(f"Manual Activation: Relay {i + 1} for Garden Bed {i + 1} Activated")
+            if debug: print(f"Manual Activation: Relay {i} for Garden Bed {i + 1} Activated")
         else:
             # If the manual button is not pressed.
             if not schedule_running[i]:  # We may have relay running under a schedule and don't want to turn it off.
@@ -281,7 +281,7 @@ def check_manual_button():
                 relays[i].value = RELAY_INACTIVE
                 # Reset the manual activation flag for the relay to False.
                 manual_activation_flags[i] = False
-                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
+                if debug: print(f"Relay {i} for Garden Bed {i + 1} Off")
 
 
 def print_relay_properties():
@@ -291,7 +291,7 @@ def print_relay_properties():
         print(f"End Time Duration: {end_time_duration[relay_index]}")
         print(f"Schedule Running: {schedule_running[relay_index]}")
         print(f"Watering Days: {watering_days[relay_index]}")
-        print(f"Watering Times: {watering_times[relay_index]}")
+        print(f"Watering Times: {watering_times[relay_index][2]}")
         print("\n")
 
 
