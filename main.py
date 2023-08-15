@@ -23,7 +23,6 @@ A Pause Schedule Button has been added which when pressed will put the automated
 great for days when it's raining, and you don't want the system to run.
 You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
-
 """
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
