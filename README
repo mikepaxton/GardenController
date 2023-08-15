@@ -107,19 +107,8 @@ tm_wday=
 The program utilizes the watering schedule stored in the JSON file named "Water_Schedule.json" for each individual
 garden bed. This file is formatted in JSON and contains multiple days and corresponding times when watering should
 be initiated. The garden_bed_schedule variable empowers you to define which day(s) of the week each garden bed should
-be activated. Additionally, the watering_times variable provides the means to designate the specific time(s) during the
-day when each bed requires watering as well as the duration of the run time.
-
-The garden_bed_index is a parameter in the is_watering_day function that represents the index of a specific garden bed
-in the garden_bed_schedule list. It is used to determine whether the current day is a watering day for the
-corresponding garden bed.
-
-In the context of the provided code, garden_bed_index is an integer value that ranges from 0 to the number of garden
-beds minus 1. It is used to specify which garden bed's watering schedule is being checked.
-
-For example, if you call is_watering_day(2, 3), it means you are checking whether Garden Bed 3 (0-based index) should
-be watered on the 3rd day of the week (Wednesday, since days are 0-based indices as well). The function would then look
-at the garden_bed_schedule list to determine if Garden Bed 3 should be watered on Wednesdays.
+be activated. Additionally, the watering_times variable provides the means to designate the specific time during the
+day when each bed should be watered as well as the duration of the run time.
 
 
 Important Notes
