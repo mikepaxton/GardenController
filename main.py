@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Creation Date: 08/15/2023
+Creation Date: 08/12/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -31,7 +31,7 @@ import board, time, rtc
 import json
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
-debug = False
+debug = True
 
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
@@ -204,8 +204,9 @@ def load_schedule_data():
             # Load JSON data from the file
             schedule_data = json.load(file)
 
-            # Generate the relay_order dynamically based on the keys present in watering_days
-            relay_order = list(schedule_data["watering_days"].keys())
+            # List of relay names in the desired order
+            #  ********* Need to change this code so relay# are not hardcoded. ********
+            relay_order = ["relay0", "relay1", "relay2", "relay3", "relay4", "relay5", "relay6", "relay7"]
 
             # # Reset the lists before populating them as we are using .append to build each list
             watering_days = []
@@ -215,6 +216,7 @@ def load_schedule_data():
             for relay_name in relay_order:
                 # Check if the relay name exists in the watering_days data
                 if relay_name in schedule_data["watering_days"]:
+                    if debug: print("Found Relay in JSON File")
                     # Append the schedule for the relay to watering_days
                     watering_days.append(schedule_data["watering_days"][relay_name])
                     # Append the first watering time for the relay to watering_times
@@ -287,10 +289,9 @@ def print_relay_properties():
         print(f"Relay Index: {relay_index}")
         print(f"Manual Activation Flag: {manual_activation_flags[relay_index]}")
         print(f"End Time Duration: {end_time_duration[relay_index]}")
-        print(f"Current Time Monotonic: {int(time.monotonic())}")
         print(f"Schedule Running: {schedule_running[relay_index]}")
         print(f"Watering Days: {watering_days[relay_index]}")
-        print(f"Watering Times: {watering_times[relay_index][2]}")
+        print(f"Watering Times: {watering_times[relay_index]}")
         print("\n")
 
 
@@ -304,7 +305,7 @@ def main_loop():
 
         while True:  # Continuously loop to monitor and manage relay control and scheduling.
             try:
-                if debug: print("Entering main loop. Start of debug for this iteration...")
+                if debug: print("Entering main loop...")
 
                 # Every loop iteration get current time and day of the week from Pico RTC for checking scheduled
                 # watering days and times.
@@ -327,8 +328,8 @@ def main_loop():
                     # Iterate through each relay to determine automated scheduling.
                     for i in range(len(relays)):
                         if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-
-                            # Check if the relay is not manually activated and hasn't already been scheduled.
+                            if debug: print(f"Relay {i}: Watering Day and Time are True")
+                            # Check if the relay is not manually activated and the schedule hasn't started yet.
                             if not manual_activation_flags[i] and end_time_duration[i] == 0:
                                 # Activate the relay and calculate the end time for the scheduled duration.
                                 relays[i].value = RELAY_ACTIVE
@@ -337,6 +338,9 @@ def main_loop():
                                 # This calculates the new end_time_duration or how long to water for current relay.
                                 end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
                                 schedule_running[i] = True  # Set the relay's schedule_running flag to True.
+                                if debug: print(f"Relay {i} for Garden Bed {i + 1} Activated")
+                                if debug:print(f"End Time: {end_time_duration[i]}")
+                                if debug: print(f"Schedule Running Flag: {schedule_running}")
                             else:
                                 if debug: print(f"Relay {i} for Garden Bed {i + 1} was been manually activated")
 
