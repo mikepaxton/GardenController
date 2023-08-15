@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Creation Date: 08/15/2023
+Creation Date: 08/12/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -23,6 +23,7 @@ A Pause Schedule Button has been added which when pressed will put the automated
 great for days when it's raining, and you don't want the system to run.
 You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
+
 """
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
@@ -30,7 +31,7 @@ import board, time, rtc
 import json
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
-debug = False
+debug = True
 
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
