@@ -1,7 +1,7 @@
 Garden Control System with Raspberry Pi Pico and CircuitPython
 
 Author: Mike Paxton
-Creation Date: 08/12/2023
+Creation Date: 08/15/2023
 CircuitPython Version: 8.2.2
 
 Introduction
@@ -14,11 +14,14 @@ options, ensuring optimal watering conditions for your garden beds.
 Features
 
 Automated Scheduling: The system supports automated scheduling for each garden bed. You can specify the days of the week
-and the times when each bed should be watered. The watering schedule is stored in the Water_Schedule.json file in JSON format.
+and the time when each bed should be watered. The watering schedule is stored in the Water_Schedule.json file.
+
 Manual Control: Each garden bed is equipped with a dedicated button, allowing you to manually activate the watering
 process for individual beds. This feature is helpful for immediate watering needs.
-Pause Schedule: The system includes a "Pause Schedule" button that temporarily suspends the automated watering schedule.
+
+Pause Schedule: The system includes a "Pause Schedule" button that suspends the automated watering schedule.
 This is useful for rainy days or when you prefer manual control.
+
 Onboard LED Indicator: The Raspberry Pi Pico's onboard LED provides visual feedback about system status, such as Wi-Fi
 connection and errors.
 
