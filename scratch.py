@@ -189,14 +189,14 @@ def uptime():
 
 
 # Initialize scheduling data with empty lists for load_schedule_data
-garden_bed_schedule = []
+watering_days = []
 watering_times = []
 
 
-# Load schedule data from JSON file
+# Load schedule data from JSON file then create two lists.  One for watering_days and the other watering_times
 def load_schedule_data():
     # Declare the global variables
-    global garden_bed_schedule, watering_times
+    global watering_days, watering_times
 
     try:
         # Open the Water_Schedule.json file for reading
@@ -205,26 +205,32 @@ def load_schedule_data():
             schedule_data = json.load(file)
 
             # List of relay names in the desired order
+            #  ********* Need to change this code so relay# are not hardcoded. ********
             relay_order = ["relay0", "relay1", "relay2", "relay3", "relay4", "relay5", "relay6", "relay7"]
 
-            # # Reset the lists before populating them
-            garden_bed_schedule = []
+            # # Reset the lists before populating them as we are using .append to build each list
+            watering_days = []
             watering_times = []
 
-            # Iterate through each relay name in the order
+            # Iterate through each relay name in the order and build both lists for scheduling
             for relay_name in relay_order:
-                # Check if the relay name exists in the garden_bed_schedule data
-                if relay_name in schedule_data["garden_bed_schedule"]:
-                    # Append the schedule for the relay to garden_bed_schedule
-                    garden_bed_schedule.append(schedule_data["garden_bed_schedule"][relay_name])
+                # Check if the relay name exists in the watering_days data
+                if relay_name in schedule_data["watering_days"]:
+                    if debug: print("Found Relay in JSON File")
+                    # Append the schedule for the relay to watering_days
+                    watering_days.append(schedule_data["watering_days"][relay_name])
                     # Append the first watering time for the relay to watering_times
-                    watering_times.append(schedule_data["watering_times"][relay_name][0])
+                    watering_times.append(schedule_data["watering_times"][relay_name])
                 else:
                     # Print a message if the relay name is not found in the schedule data
                     print(f"Relay {relay_name} not found in schedule data.")
 
-            # Return the populated garden_bed_schedule and watering_times lists
-            return garden_bed_schedule, watering_times
+            # Print out both lists to console
+            if debug: print(f"Garden Bed Schedule List: {watering_days}")
+            if debug: print(f"Watering Times List: {watering_times}")
+
+            # Return the populated watering_days and watering_times lists
+            return watering_days, watering_times
 
     except Exception as e:
         # Print an error message if an exception occurs while loading schedule data
@@ -236,22 +242,24 @@ def load_schedule_data():
 load_schedule_data()  # Grab scheduling data before we get started
 
 
-def is_watering_day(garden_bed_index, current_day):
+def is_watering_day(relay_bed_index, current_day):
     # Check if the current day is included in the watering schedule for the specified garden bed.
     # Returns True if the garden bed should be watered on the current day, False otherwise.
-    return current_day in garden_bed_schedule[garden_bed_index]
+    if debug: print(f"Relay: {relay_bed_index} Watering Days: {watering_days[relay_bed_index]}")
+    return current_day in watering_days[relay_bed_index]
 
 
-def is_watering_time(garden_bed_index, current_time):
+def is_watering_time(relay_bed_index, current_time):
     # Check if the current time matches the watering time for the specified garden bed.
     # Returns True if the garden bed should be watered on the current time, False otherwise.
     # Must convert list to a tuple in order to return True if match is made.
-    return current_time == tuple(watering_times[garden_bed_index][:2])
+    if debug: print(f"Relay: {relay_bed_index} Watering Time: {watering_times[relay_bed_index][:2]}")
+    return current_time == tuple(watering_times[relay_bed_index][:2])
 
 
 # Define variables for the main loop.
 manual_activation_flags = [False] * len(relays)  # When relay is manually activated set this flag for that relay
-end_time_duration = [0] * len(watering_times)  # When a relay is activated due to schedule set its end of run time
+end_time_duration = [0] * len(relays)  # When a relay is activated due to schedule set its end of run time
 schedule_running = [False] * len(relays)  # When a relay is activated due to schedule set its schedule running flag
 
 
@@ -276,7 +284,18 @@ def check_manual_button():
                 if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
 
 
-def main():
+def print_relay_properties():
+    for relay_index in range(len(relays)):
+        print(f"Relay Index: {relay_index}")
+        print(f"Manual Activation Flag: {manual_activation_flags[relay_index]}")
+        print(f"End Time Duration: {end_time_duration[relay_index]}")
+        print(f"Schedule Running: {schedule_running[relay_index]}")
+        print(f"Watering Days: {watering_days[relay_index]}")
+        print(f"Watering Times: {watering_times[relay_index]}")
+        print("\n")
+
+
+def main_loop():
     try:
 
         # Attempt to establish a Wi-Fi connection with a maximum of 3 retries and a 10-second interval between each attempt.
@@ -293,12 +312,12 @@ def main():
                 current_date_time = rtc.RTC().datetime
                 current_day = current_date_time.tm_wday
                 current_time = (current_date_time.tm_hour, current_date_time.tm_min)
-                if debug: print(f"Current Structured Time: {current_time}")
 
                 # Define a list of weekday names for debug printing use
                 weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
                 if debug: print("Current day:", current_day, "(", weekday_names[current_day], ")")
                 if debug: print("Current Real Time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
+                if debug: print(f"Current Structured Time: {current_time}")
 
                 check_manual_button()  # Check for any manual buttons being pushed
                 load_schedule_data()  # Reload schedule data
@@ -309,18 +328,21 @@ def main():
                     # Iterate through each relay to determine automated scheduling.
                     for i in range(len(relays)):
                         if is_watering_day(i, current_day) and is_watering_time(i, current_time):
-                            if debug: print(f"Relay {i + 1}: Watering condition is True")
+                            if debug: print(f"Relay {i}: Watering Day and Time are True")
                             # Check if the relay is not manually activated and the schedule hasn't started yet.
                             if not manual_activation_flags[i] and end_time_duration[i] == 0:
                                 # Activate the relay and calculate the end time for the scheduled duration.
                                 relays[i].value = RELAY_ACTIVE
+                                # Get the third element (0-2) watering duration from watering_times
+                                # multiply by 60 for minutes, add the current time elapsed in seconds from Pico boot.
+                                # This calculates the new end_time_duration or how long to water for current relay.
                                 end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
                                 schedule_running[i] = True  # Set the relay's schedule_running flag to True.
-                                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Activated")
+                                if debug: print(f"Relay {i} for Garden Bed {i + 1} Activated")
                                 if debug:print(f"End Time: {end_time_duration[i]}")
                                 if debug: print(f"Schedule Running Flag: {schedule_running}")
                             else:
-                                if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} was been manually activated")
+                                if debug: print(f"Relay {i} for Garden Bed {i + 1} was been manually activated")
 
                         # Check if a watering schedule is currently running and if the end time has been reached.
                         if schedule_running[i] and end_time_duration[i] < int(time.monotonic()):
@@ -341,9 +363,10 @@ def main():
                             # reset those active relays scheduled flag and end time.
                             schedule_running[i] = False
                             end_time_duration[i] = 0
-                            if debug: print(f"Relay {i + 1} for Garden Bed {i + 1} Off")
+                            if debug: print(f"Relay {i} for Garden Bed {i + 1} Off")
 
                 uptime()  # This will print to the console how long the Pico has been up and running.
+                if debug: print_relay_properties()
                 time.sleep(1.5)  # Add a short delay to prevent tight looping causing excessive cpu processing
 
             except Exception as main_loop_error:
@@ -363,4 +386,4 @@ def main():
 
 # Call the main function
 if __name__ == "__main__":
-    main()
+    main_loop()
