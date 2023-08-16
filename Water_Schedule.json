@@ -1,4 +1,5 @@
 {
+    "relay_order": ["relay0", "relay1", "relay2", "relay3", "relay4", "relay5", "relay6", "relay7"],
     "watering_days": {
         "relay0": [0, 1, 2, 3, 4, 5, 6],
         "relay1": [0, 3, 5],
