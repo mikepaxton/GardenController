@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Creation Date: 08/15/2023
+Creation Date: 08/12/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -31,7 +31,7 @@ import board, time, rtc
 import json
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
-debug = False
+debug = True
 
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
@@ -204,11 +204,10 @@ def load_schedule_data():
             # Load JSON data from the file
             schedule_data = json.load(file)
 
-            # List of relay names in the desired order
-            #  ********* Need to change this code so relay# are not hardcoded. ********
-            relay_order = ["relay0", "relay1", "relay2", "relay3", "relay4", "relay5", "relay6", "relay7"]
+            # Get the relay order from the JSON data
+            relay_order = schedule_data["relay_order"]
 
-            # # Reset the lists before populating them as we are using .append to build each list
+            # Reset the lists before populating them as we are using .append to build each list
             watering_days = []
             watering_times = []
 
@@ -219,7 +218,7 @@ def load_schedule_data():
                     if debug: print("Found Relay in JSON File")
                     # Append the schedule for the relay to watering_days
                     watering_days.append(schedule_data["watering_days"][relay_name])
-                    # Append the first watering time for the relay to watering_times
+                    # Append the watering time for the relay to watering_times
                     watering_times.append(schedule_data["watering_times"][relay_name])
                 else:
                     # Print a message if the relay name is not found in the schedule data
