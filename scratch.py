@@ -29,6 +29,7 @@ import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc
 import json
+from datetime import datetime
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
 debug = True
@@ -84,9 +85,24 @@ led = DigitalInOut(board.LED)
 led.direction = Direction.OUTPUT
 
 
-# Used for creating a visual display of certain error messages
-# Currently only used for failed Wi-Fi connection. Flashes 5 times
 def flash_led(times, on_duration, off_duration):
+    """
+    Flashes Pico onboard LED a specified number of times with given on and off durations.
+
+    Parameters:
+        times (int): Number of times to flash the LED.
+        on_duration (float): Duration in seconds to keep the LED on during each flash.
+        off_duration (float): Duration in seconds to keep the LED off between flashes.
+
+    Returns:
+        None
+
+    This function is used to visually indicate error messages or other events by flashing Picos onboard LED.
+    It turns the LED on for the specified `on_duration`, then turns it off for the specified `off_duration`.
+    This cycle is repeated for the specified number of times. The function provides a simple way to create
+    a visual indicator that can be used for different purposes, such as signaling errors, successful events,
+    or certain conditions in your program.
+    """
     for _ in range(times):
         led.value = True  # Turn on the LED
         time.sleep(on_duration)
@@ -95,6 +111,24 @@ def flash_led(times, on_duration, off_duration):
 
 
 def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
+    """
+    Establishes a Wi-Fi connection using the provided SSID and password.
+
+    Parameters:
+        max_retries (int): Maximum number of connection attempts before giving up.
+        retry_interval (int): Time interval in seconds between connection retries.
+        simulate_failure (bool): If True, simulates a connection failure for testing purposes.
+
+    Returns:
+        None
+
+    This function attempts to connect to a Wi-Fi network using the SSID and password retrieved from
+    settings.toml file. It will retry the connection up to the specified number of times, with a
+    defined interval between retries. If the connection is successful, it displays a confirmation
+    message and turns off an LED indicator. If the maximum number of retries is reached without a
+    successful connection, it displays an error message, flashes the LED to indicate failure, and
+    turns off the LED after a brief delay.
+    """
     retries = 0
 
     while retries < max_retries:
@@ -129,6 +163,19 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
 
 
 def get_local_time():
+    """
+    Retrieves and returns the current local time based on a specified timezone.
+
+    Returns:
+        time.struct_time: A struct_time object representing the current local time.
+
+    This function retrieves the current local time from an online time API based on a specified timezone.
+    It makes an HTTP GET request to the worldtimeapi.org API, retrieves JSON data containing world time information,
+    and processes the data to calculate the current local time. The function takes into account the timezone offset,
+    raw offset, and daylight saving time (DST) information to accurately determine the current time.
+    The resulting time is returned as a time.struct_time object, which provides various components of the time
+    (hour, minute, second, etc.) in a structured format.
+    """
     global pool  # Access the global pool variable
     # If the socket pool doesn't exist, create it using the Wi-Fi radio connection.
     if pool is None:
@@ -164,27 +211,48 @@ def get_local_time():
 
 
 def set_rtc_datetime():
-    # Get the current world time using the function get_world_time().
+    """
+    Sets the Real-Time Clock (RTC) of the device with the current local time.
+
+    This function retrieves the current local time from an online time API using the `get_local_time` function.
+    It then creates an instance of the RTC to manage the device's internal clock and sets the RTC datetime using
+    the retrieved current time. The function also displays the newly set RTC date and time, as well as the
+    current time in a formatted, human-readable format.
+    """
+    # Obtain the current local time from the network using get_local_time() function.
     current_time = get_local_time()
-    # Create an RTC (Real-Time Clock) instance to manage the internal device clock.
+
+    # Create an instance of the Real-Time Clock (RTC) to manage the device's internal clock.
     clock = rtc.RTC()
-    # Set the internal RTC datetime using the current_time struct_time object.
+
+    # Set the internal RTC datetime using the retrieved current_time as a struct_time object.
     clock.datetime = time.struct_time(current_time)
-    # Display the current date and time that has been set in the RTC.
+
+    # Display the newly set RTC date and time.
     current_date_time = clock.datetime
-    if debug: print(f"Current RTC Date/Time: {current_date_time}")
+    if debug: print(f"RTC Date/Time Set: {current_date_time}")
+
     # Format and print the current time in a human-readable format.
-    if debug: print(f"Printable Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
+    if debug: print(f"Formatted Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
 
 
 def uptime():
-    # Get the current uptime in seconds from the Pico
+    """
+    Prints the current uptime of the Pico in a human-readable format.
+
+    This function retrieves the current uptime of the Pico from its monotonic clock and converts it into
+    a more human-readable format, including hours, minutes, and seconds. The resulting uptime is printed
+    to the console in a clear and readable format.
+    """
+    # Get the current uptime in seconds from the Pico's monotonic clock.
     uptime_seconds = time.monotonic()
-    # Convert uptime to a more human-readable format (hours, minutes, seconds)
-    uptime_hours = int(uptime_seconds // 3600)
-    uptime_minutes = int((uptime_seconds % 3600) // 60)
-    uptime_seconds %= 60
-    # Print the uptime in a readable format
+
+    # Convert the uptime in seconds to a more human-readable format (hours, minutes, seconds).
+    uptime_hours = int(uptime_seconds // 3600)  # Calculate the number of whole hours.
+    uptime_minutes = int((uptime_seconds % 3600) // 60)  # Calculate the number of whole minutes.
+    uptime_seconds %= 60  # Calculate the remaining seconds after calculating hours and minutes.
+
+    # Print the uptime in a readable format.
     print(f"Current Uptime: {uptime_hours} hours, {uptime_minutes} minutes, {uptime_seconds} seconds")
 
 
@@ -195,7 +263,18 @@ watering_times = []
 
 # Load schedule data from JSON file then create two lists.  One for watering_days and the other watering_times
 def load_schedule_data():
-    # Declare the global variables
+    """
+    Load watering schedule data from a JSON file and create lists for watering days and times.
+
+    Returns:
+        list, list: Lists of watering days and watering times.
+
+    This function reads a JSON file containing watering schedule data and creates two lists:
+    one for watering days and the other for watering times. It retrieves the relay order from the JSON data,
+    then iterates through each relay name in the order, appending the corresponding schedule and time data to the lists.
+    The resulting lists are returned, and debug messages are printed during the process if the debug flag is set.
+    If an error occurs while loading the data, empty lists are returned as a fallback.
+    """
     global watering_days, watering_times
 
     try:
@@ -213,28 +292,21 @@ def load_schedule_data():
 
             # Iterate through each relay name in the order and build both lists for scheduling
             for relay_name in relay_order:
-                # Check if the relay name exists in the watering_days data
                 if relay_name in schedule_data["watering_days"]:
                     if debug: print("Found Relay in JSON File")
-                    # Append the schedule for the relay to watering_days
                     watering_days.append(schedule_data["watering_days"][relay_name])
-                    # Append the watering time for the relay to watering_times
                     watering_times.append(schedule_data["watering_times"][relay_name])
                 else:
-                    # Print a message if the relay name is not found in the schedule data
                     print(f"Relay {relay_name} not found in schedule data.")
 
-            # Print out both lists to console
+            # Print out both lists to the console
             if debug: print(f"Garden Bed Schedule List: {watering_days}")
             if debug: print(f"Watering Times List: {watering_times}")
 
-            # Return the populated watering_days and watering_times lists
             return watering_days, watering_times
 
     except Exception as e:
-        # Print an error message if an exception occurs while loading schedule data
         print(f"Error loading schedule data: {e}")
-        # Return empty lists as a fallback
         return [], []
 
 
@@ -242,28 +314,59 @@ load_schedule_data()  # Grab scheduling data before we get started
 
 
 def is_watering_day(relay_bed_index, current_day):
-    # Check if the current day is included in the watering schedule for the specified garden bed.
-    # Returns True if the garden bed should be watered on the current day, False otherwise.
+    """
+    Checks if the current day is a watering day for the specified garden bed.
+
+    Args:
+        relay_bed_index (int): Index of the garden bed's relay.
+        current_day (int): Current day of the week (0 to 6, where 0 is Monday and 6 is Sunday).
+
+    Returns:
+        bool: True if the garden bed should be watered on the current day, False otherwise.
+
+    This function checks whether the specified garden bed should be watered on the current day based on the
+    watering schedule. It takes the relay bed index and the current day of the week as input arguments.
+    The function returns True if the garden bed should be watered on the current day, otherwise, it returns False.
+    """
     if debug: print(f"Relay: {relay_bed_index} Watering Days: {watering_days[relay_bed_index]}")
     return current_day in watering_days[relay_bed_index]
 
 
 def is_watering_time(relay_bed_index, current_time):
-    # Check if the current time matches the watering time for the specified garden bed.
-    # Returns True if the garden bed should be watered on the current time, False otherwise.
-    # Must convert list to a tuple in order to return True if match is made.
+    """
+    Checks if the current time matches the watering time for the specified garden bed.
+
+    Args:
+        relay_bed_index (int): Index of the garden bed's relay.
+        current_time (tuple): Current time in (hour, minute) format.
+
+    Returns:
+        bool: True if the garden bed should be watered at the current time, False otherwise.
+
+    This function compares the current time with the scheduled watering time for the specified garden bed.
+    It takes the relay bed index and the current time in (hour, minute) format as input arguments.
+    The function returns True if the garden bed should be watered at the current time, otherwise, it returns False.
+    """
     if debug: print(f"Relay: {relay_bed_index} Watering Time: {watering_times[relay_bed_index][:2]}")
     return current_time == tuple(watering_times[relay_bed_index][:2])
 
 
 # Define variables for the main loop.
 manual_activation_flags = [False] * len(relays)  # When relay is manually activated set this flag for that relay
-end_time_duration = [0] * len(relays)  # When a relay is activated due to schedule set its end of run time
 schedule_running = [False] * len(relays)  # When a relay is activated due to schedule set its schedule running flag
+start_time = [-1] * len(relays)  # Initialize a list to store start time for each relay
+end_time = [-1] * len(relays)  # Initialize a list to store end time for each relay
 
 
 def check_manual_button():
-    # Loop through each relay and its associated manual button to control the relays.
+    """
+    Checks the state of manual buttons and controls the corresponding relays.
+
+    This function iterates through each relay and its associated manual button to check if the manual button
+    is pressed (active LOW), indicating a request for manual relay activation. If the button is pressed,
+    the corresponding relay is activated and a manual activation flag is set. If the button is released,
+    the relay is deactivated and the manual activation flag is reset.
+    """
     for i, manual_button_state in enumerate(buttons):
         # Check if the manual button is pressed (active LOW), indicating manual relay activation.
         if not manual_button_state.value:
@@ -283,11 +386,39 @@ def check_manual_button():
                 if debug: print(f"Relay {i} for Garden Bed {i + 1} Off")
 
 
+def calculate_end_time(start, duration_minutes):
+    """
+    Calculate the watering end time based on the provided start time and duration in minutes.
+
+    Args:
+        start (time.struct_time): The starting time as a time.struct_time object.
+        duration_minutes (int): The duration in minutes to add to the start time.
+
+    Returns:
+        time.struct_time: The calculated end time as a time.struct_time object.
+
+    This function takes a starting time (in the form of a time.struct_time object) and a duration in minutes
+    as inputs. It calculates the end time by adding the specified duration in minutes to the start time. The
+    result is returned as a time.struct_time object representing the calculated end time.
+    """
+    end_time_local = start + (duration_minutes * 60)
+    return end_time_local
+
+
 def print_relay_properties():
+    """
+    Prints the properties of each relay for debugging purposes.
+
+    This function iterates through each relay and prints various properties associated with it.
+    These properties include the relay index, manual activation flag, watering start time, watering end time,
+    schedule running status,watering days, and watering times. This information can be helpful for debugging and
+    monitoring the behavior of the relays and their associated schedules.
+    """
     for relay_index in range(len(relays)):
         print(f"Relay Index: {relay_index}")
         print(f"Manual Activation Flag: {manual_activation_flags[relay_index]}")
-        print(f"End Time Duration: {end_time_duration[relay_index]}")
+        print(f"Watering Start Time: {start_time[relay_index]}")
+        print(f"Watering End Time: {end_time[relay_index]}")
         print(f"Schedule Running: {schedule_running[relay_index]}")
         print(f"Watering Days: {watering_days[relay_index]}")
         print(f"Watering Times: {watering_times[relay_index]}")
@@ -295,20 +426,24 @@ def print_relay_properties():
 
 
 def main_loop():
-    try:
+    """
+    The main loop of the program responsible for managing relay control and scheduling.
 
-        # Attempt to establish a Wi-Fi connection with a maximum of 3 retries and a 10-second interval between each attempt.
-        # To simulate a connection failure, set simulate_failure to True, which will trigger LED flashing on the Pico board.
-        wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)
-        set_rtc_datetime()  # From the Internet get current local day of week and time and update RTC
+    This function contains the core logic of the program. It establishes a Wi-Fi connection,
+    updates the Pico's RTC (Real-Time Clock), and continuously monitors and manages relay control and scheduling.
+    The loop iterates through each relay, checks for manual activation, checks the scheduling status,
+    activates relays based on schedules, and handles the pausing of schedules. It also prints the Pico's uptime
+    and the properties of each relay for debugging purposes.
+    """
+    try:
+        wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)  # Attempt to connect to Wi-Fi
+        set_rtc_datetime()  # Get current local day of week and time from the Internet and update RTC
 
         while True:  # Continuously loop to monitor and manage relay control and scheduling.
             try:
                 if debug: print("Entering main loop...")
 
-                # Every loop iteration get current time and day of the week from Pico RTC for checking scheduled
-                # watering days and times.
-                current_date_time = rtc.RTC().datetime
+                current_date_time = rtc.RTC().datetime  # Get current time and day of the week from Pico RTC.
                 current_day = current_date_time.tm_wday
                 current_time = (current_date_time.tm_hour, current_date_time.tm_min)
 
@@ -328,58 +463,43 @@ def main_loop():
                     for i in range(len(relays)):
                         if is_watering_day(i, current_day) and is_watering_time(i, current_time):
                             if debug: print(f"Relay {i}: Watering Day and Time are True")
-                            # Check if the relay is not manually activated and the schedule hasn't started yet.
-                            if not manual_activation_flags[i] and end_time_duration[i] == 0:
-                                # Activate the relay and calculate the end time for the scheduled duration.
+                            if not manual_activation_flags[i] and end_time[i] == -1:
                                 relays[i].value = RELAY_ACTIVE
-                                # Get the third element (0-2) watering duration from watering_times
-                                # multiply by 60 for minutes, add the current time elapsed in seconds from Pico boot.
-                                # This calculates the new end_time_duration or how long to water for current relay.
-                                end_time_duration[i] = watering_times[i][2] * 60 + int(time.monotonic())
-                                schedule_running[i] = True  # Set the relay's schedule_running flag to True.
+                                start_time[i] = rtc.RTC().datetime  # Record the start time
+                                end_time[i] = calculate_end_time(start_time[i], watering_times[i][2])
+                                schedule_running[i] = True
                                 if debug: print(f"Relay {i} for Garden Bed {i + 1} Activated")
-                                if debug:print(f"End Time: {end_time_duration[i]}")
-                                if debug: print(f"Schedule Running Flag: {schedule_running}")
                             else:
                                 if debug: print(f"Relay {i} for Garden Bed {i + 1} was been manually activated")
 
-                        # Check if a watering schedule is currently running and if the end time has been reached.
-                        if schedule_running[i] and end_time_duration[i] < int(time.monotonic()):
-                            # Deactivate the relay as the watering schedule has ended.
+                        if schedule_running[i] and end_time[i] <= rtc.RTC().datetime:
                             relays[i].value = RELAY_INACTIVE
-                            # Update the schedule_running flag to indicate that the schedule has ended.
                             schedule_running[i] = False
-                            end_time_duration[i] = 0
+                            end_time[i] = -1
 
                 else:
                     if debug: print("Scheduling paused")
-                    # Handles cases when the pause_schedule_button is pressed.
                     for i in range(len(relays)):
-                        if not manual_activation_flags[i]:  # We don't want to turn off a manually activated relay
-                            # Deactivate the relay.
+                        if not manual_activation_flags[i]:
                             relays[i].value = RELAY_INACTIVE
-                            # if a relays were running on a schedule and then the schedule was turned off we need to
-                            # reset those active relays scheduled flag and end time.
                             schedule_running[i] = False
-                            end_time_duration[i] = 0
+                            end_time[i] = -1
                             if debug: print(f"Relay {i} for Garden Bed {i + 1} Off")
 
-                uptime()  # This will print to the console how long the Pico has been up and running.
+                uptime()  # Print the Pico's uptime to the console.
                 if debug: print_relay_properties()
-                time.sleep(1.5)  # Add a short delay to prevent tight looping causing excessive cpu processing
+                time.sleep(1.5)  # Add a short delay to prevent tight looping causing excessive CPU processing
 
             except Exception as main_loop_error:
                 # Handle errors that occur in the main loop.
                 print(f"Main Loop Error: {main_loop_error}")
-                # Flash the LED three times to indicate a main loop error.
-                flash_led(3, 0.1, 0.1)
+                flash_led(3, 0.1, 0.1)  # Flash the LED three times to indicate a main loop error.
                 time.sleep(1)  # Wait for 1 second before continuing.
 
     except Exception as main_error:
         # Handle errors that occur before entering the main loop.
         print(f"Main Error: {main_error}")
-        # Flash the LED five times to indicate a main error.
-        flash_led(5, 0.1, 0.1)
+        flash_led(5, 0.1, 0.1)  # Flash the LED five times to indicate a main error.
         time.sleep(1)  # Wait for 1 second before exiting.
 
 
