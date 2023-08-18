@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Creation Date: 08/12/2023
+Modification Date: 08/17/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
