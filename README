@@ -1,4 +1,4 @@
-Garden Control System with Raspberry Pi Pico and CircuitPython
+Garden Control System with Raspberry Pi Pico W and CircuitPython
 
 Author: Mike Paxton
 Creation Date: 08/15/2023
@@ -7,7 +7,7 @@ CircuitPython Version: 8.2.2
 Introduction
 
 The Garden Control System is designed to efficiently manage the watering of up to 8 garden beds using a
-Raspberry Pi Pico microcontroller and CircuitPython. This system is particularly suitable for solar-powered
+Raspberry Pi Pico W microcontroller and CircuitPython. This system is particularly suitable for solar-powered
 setups where conserving battery usage is crucial. It incorporates both automated scheduling and manual control
 options, ensuring optimal watering conditions for your garden beds.
 
@@ -15,6 +15,8 @@ Features
 
 Automated Scheduling: The system supports automated scheduling for each garden bed. You can specify the days of the week
 and the time when each bed should be watered. The watering schedule is stored in the Water_Schedule.json file.
+The system gets the current date/time from the internet so you will need a Pico W.  The date and time are stored in the
+Pico W's onboard Real Time Clock (RTC).
 
 Manual Control: Each garden bed is equipped with a dedicated button, allowing you to manually activate the watering
 process for individual beds. This feature is helpful for immediate watering needs.
@@ -34,16 +36,6 @@ Wi-Fi Configuration: Modify the CIRCUITPY_WIFI_SSID and CIRCUITPY_WIFI_PASSWORD 
 match your Wi-Fi network credentials.
 JSON Schedule: Update the Water_Schedule.json file with your desired watering schedule. The file is organized with
 each garden bed's schedule and watering times.
-
-Installation and Setup
-
-Clone the Repository: Clone this repository to your local machine using Git or by downloading the ZIP archive.
-Circuit Setup: Connect the Raspberry Pi Pico to the relay modules and buttons according to the GPIO pin assignments
-specified in the code.
-Wi-Fi Configuration: Modify the CIRCUITPY_WIFI_SSID and CIRCUITPY_WIFI_PASSWORD environment variables in the code to
-match your Wi-Fi network credentials.
-JSON Schedule: Update the Water_Schedule.json file with your desired watering schedule. The file is organized with each
-garden bed's schedule and watering times.
 
 Usage
 
