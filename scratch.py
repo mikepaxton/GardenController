@@ -6,7 +6,7 @@ I don't always have time to check the code in a working environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Modification Date: 08/17/2023
+Modification Date: 08/28/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -23,16 +23,32 @@ A Pause Schedule Button has been added which when pressed will put the automated
 great for days when it's raining, and you don't want the system to run.
 You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
+I've added a basic log file to record specific events.
 
 """
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
-import board, time, rtc
+import board, time, rtc, microcontroller
 import json
+#from lcd_controller import LcdController
+
+# Create an instance of the LcdController class
+# lcd = LcdController  # Instantiate the LcdController class to control the LCD display and buttons.
+# lcd.set_backlight("green")  # Set the backlight color of the LCD display to green
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
 debug = False
 
+# Enable or disable log updates. If True, the system will update log.txt with logged information.
+# NOTE: Enabling logging will use some of Pico's precious memory. Make sure to limit log_interval
+# to avoid memory constraints.
+enable_logging = True
+
+# If logging is enabled, log_interval specifies how many minutes must pass before updating the log file.
+log_interval = 1
+
+# Define the name of the log file
+log_filename = "log.txt"
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
 # RELAY_ACTIVE is used to indicate that a relay is turned on or activated.
@@ -52,7 +68,6 @@ RELAY_INACTIVE = True
 relay_pins = [board.GP0, board.GP1, board.GP2, board.GP3, board.GP4, board.GP5, board.GP6, board.GP7]
 button_pins = [board.GP8, board.GP9, board.GP10, board.GP11, board.GP12, board.GP13, board.GP14, board.GP15]
 
-
 # Create DigitalInOut instances for each GPIO pin in 'relay_pins' and 'button_pin' to control the corresponding
 # relays and buttons.
 relays = [DigitalInOut(pin) for pin in relay_pins]
@@ -68,9 +83,6 @@ for button in buttons:
     button.direction = Direction.INPUT
     button.pull = Pull.UP
 
-# Define the socket pool as a global variable at the module level+
-pool = None
-
 # Define the GPIO pin for the pause button.
 # Change the pin number (GP16) to match the pin you are using for the new button.
 pause_schedule_button = DigitalInOut(board.GP16)
@@ -79,7 +91,7 @@ pause_schedule_button = DigitalInOut(board.GP16)
 pause_schedule_button.direction = Direction.INPUT
 pause_schedule_button.pull = Pull.UP
 
-# Define onboard LED and set it to OUTPUT
+# # Define onboard LED and set it to OUTPUT
 led = DigitalInOut(board.LED)
 led.direction = Direction.OUTPUT
 
@@ -88,19 +100,18 @@ def flash_led(times, on_duration, off_duration):
     """
     Flashes Pico onboard LED a specified number of times with given on and off durations.
 
-    Parameters:
-        times (int): Number of times to flash the LED.
-        on_duration (float): Duration in seconds to keep the LED on during each flash.
-        off_duration (float): Duration in seconds to keep the LED off between flashes.
-
-    Returns:
-        None
-
     This function is used to visually indicate error messages or other events by flashing Picos onboard LED.
     It turns the LED on for the specified `on_duration`, then turns it off for the specified `off_duration`.
     This cycle is repeated for the specified number of times. The function provides a simple way to create
     a visual indicator that can be used for different purposes, such as signaling errors, successful events,
     or certain conditions in your program.
+
+    :parameters:
+        times (int): Number of times to flash the LED.
+        on_duration (float): Duration in seconds to keep the LED on during each flash.
+        off_duration (float): Duration in seconds to keep the LED off between flashes.
+
+    :returns: None
     """
     for _ in range(times):
         led.value = True  # Turn on the LED
@@ -113,20 +124,19 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
     """
     Establishes a Wi-Fi connection using the provided SSID and password.
 
-    Parameters:
-        max_retries (int): Maximum number of connection attempts before giving up.
-        retry_interval (int): Time interval in seconds between connection retries.
-        simulate_failure (bool): If True, simulates a connection failure for testing purposes.
-
-    Returns:
-        None
-
     This function attempts to connect to a Wi-Fi network using the SSID and password retrieved from
     settings.toml file. It will retry the connection up to the specified number of times, with a
     defined interval between retries. If the connection is successful, it displays a confirmation
     message and turns off an LED indicator. If the maximum number of retries is reached without a
     successful connection, it displays an error message, flashes the LED to indicate failure, and
     turns off the LED after a brief delay.
+
+    :parameters
+        max_retries (int): Maximum number of connection attempts before giving up.
+        retry_interval (int): Time interval in seconds between connection retries.
+        simulate_failure (bool): If True, simulates a connection failure for testing purposes.
+
+    :returns: None
     """
     retries = 0
 
@@ -134,14 +144,12 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
         try:
             # Display status message indicating the Wi-Fi connection process.
             if debug: print(f"Connecting to WiFi (Attempt {retries + 1}/{max_retries})...")
-            if simulate_failure:
+            if simulate_failure:  # For debug
                 raise Exception("Simulated connection failure")  # Simulate a connection failure
-            # Connect to the Wi-Fi network using the SSID and password retrieved from environment variables.
+            # Connect to the Wi-Fi network using the SSID and password retrieved from settings.toml
             wifi.radio.connect(os.getenv('CIRCUITPY_WIFI_SSID'), os.getenv('CIRCUITPY_WIFI_PASSWORD'))
-            # Display confirmation message upon successful connection.
             if debug: print("Connected to WiFi")
-            # Turn off the LED to indicate successful connection.
-            led.value = False
+            led.value = False  # Turn off the LED to indicate successful connection
             # Display the IP address assigned to the device by the Wi-Fi network.
             if debug: print("My IP address is", wifi.radio.ipv4_address)
             return  # Exit the function on successful connection
@@ -159,14 +167,12 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
     flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
     time.sleep(1)  # Wait for 1 second before turning off the LED.
     led.value = False  # Turn off the LED.
+    #lcd.set_backlight("red")
 
 
 def get_local_time():
     """
     Retrieves and returns the current local time based on a specified timezone.
-
-    Returns:
-        time.struct_time: A struct_time object representing the current local time.
 
     This function retrieves the current local time from an online time API based on a specified timezone.
     It makes an HTTP GET request to the worldtimeapi.org API, retrieves JSON data containing world time information,
@@ -174,17 +180,19 @@ def get_local_time():
     raw offset, and daylight saving time (DST) information to accurately determine the current time.
     The resulting time is returned as a time.struct_time object, which provides various components of the time
     (hour, minute, second, etc.) in a structured format.
+
+    :returns:
+        current_time (time.struct_time): A struct_time object representing the current local time.
     """
-    global pool  # Access the global pool variable
-    # If the socket pool doesn't exist, create it using the Wi-Fi radio connection.
-    if pool is None:
-        pool = socketpool.SocketPool(wifi.radio)
+    # Create a new socket pool for this function's use
+    pool = socketpool.SocketPool(wifi.radio)
     # Create an Adafruit Requests session using the socket pool and SSL context.
     request = adafruit_requests.Session(pool, ssl.create_default_context())
     # Define the URL for querying world time based on the specified timezone.
     url = "https://worldtimeapi.org/api/timezone/"
     timezone = "America/Los_Angeles"  # Change your timezone to match.
     url = url + timezone
+
     # Display a message indicating the URL being accessed.
     if debug: print(f"Accessing URL \n{url}")
     # Send a GET request to the URL and retrieve JSON data containing world time information.
@@ -217,6 +225,8 @@ def set_rtc_datetime():
     It then creates an instance of the RTC to manage the device's internal clock and sets the RTC datetime using
     the retrieved current time. The function also displays the newly set RTC date and time, as well as the
     current time in a formatted, human-readable format.
+
+    :returns: None
     """
     # Obtain the current local time from the network using get_local_time() function.
     current_time = get_local_time()
@@ -235,6 +245,117 @@ def set_rtc_datetime():
     if debug: print(f"Formatted Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
 
 
+def update_log(log_text):
+    """
+    Update a log file with the provided text, date, and time.
+
+    If log_update is True/Enabled, this function takes a text string as input and appends it to a
+    log file along with the current date and time obtained from the RTC (Real Time Clock) module.
+    The date and time are formatted as: "YYYY-MM-DD HH:MM:SS".
+
+    If the log file doesn't exist, this function will create it.
+
+    :parameters
+        log_text: (str): The text to be added to the log.
+
+    :returns: None
+    """
+    global log_filename
+
+    if enable_logging:  # log_update must be set to True for logging to run
+        # Get the current date and time from the RTC
+        rtc_datetime = rtc.RTC().datetime
+        current_datetime = "{:04}-{:02}-{:02} {:02}:{:02}:{:02}".format(
+            rtc_datetime.tm_year, rtc_datetime.tm_mon, rtc_datetime.tm_mday,
+            rtc_datetime.tm_hour, rtc_datetime.tm_min, rtc_datetime.tm_sec)
+        # Format the log entry
+        log_entry = f"{current_datetime}: {log_text}\n"
+        try:
+            # Append the log entry to the log file
+            with open(log_filename, "a") as log_file:
+                print(f"Log Entry: {log_entry}")
+                log_file.write(log_entry)
+                print("Write")
+                log_file.flush()
+                print("flushed")
+        except OSError:
+            print("Could not update file! File system might be read-only.")
+            pass
+
+
+def cpu_temp():
+    """
+    Retrieves the current temperature of the Raspberry Pi Pico's CPU in Celsius.
+
+    This function queries the Pico's internal temperature sensor to determine
+    the current temperature of the CPU. The returned temperature is in degrees Celsius.
+    Can be used in debug but is intended to be displayed on LCD Character display to monitor potential overheating
+    issues due to being exposed outdoor temperatures.
+
+    :returns:
+        temp (float): The current CPU temperature in Celsius.
+    """
+    temp = microcontroller.cpu.temperature
+    return temp
+
+
+def log_cpu_temp():
+    """
+    Logs the current CPU temperature in Celsius to a log file if more than X minutes have passed since the last entry.
+
+    This function checks the last modification time of the specified log file. If the time elapsed since the last log entry
+    is greater than or equal to the specified log interval in minutes, it retrieves the current CPU temperature and creates
+    a log entry with the temperature information. The log entry is appended to the log file along with the current date
+    and time.
+
+    :returns: None
+    """
+    global log_filename
+    try:
+        # # Get the last modification time of the log file
+        # last_mod_time = os.stat(log_filename).st_mtime
+        current_time = time.time()
+        stat_result = os.stat(log_filename)
+        last_mod_time = stat_result[8]  # Index 8 corresponds to st_mtime
+        # Check if the time elapsed since the last log entry is greater than or equal to the specified log interval
+        # in seconds.  Convert log_interval from minutes to seconds by multiplying it by 60.
+        if current_time - last_mod_time >= (log_interval * 60):
+            # Get CPU temperature
+            cpu_temperature = cpu_temp()
+            log_text = f"CPU Temp: {cpu_temperature:.2f} °C"
+
+            # Update the log with the CPU temperature
+            update_log(log_text)
+    except OSError:
+        pass
+
+
+# def log_relay_event(relay_number, active_flag):
+#     """
+#     Logs a relay event along with the relay number and its state.
+#
+#     :param relay_number: The number of the relay.
+#     :type relay_number: int
+#     :param active_flag: manual_activation_flag for relay
+#     :type active_flag bool
+#
+#     :return: None
+#     """
+#     global log_filename, logged
+#
+#     if active_flag and not logged:
+#         # Use relay_number and state to log the event
+#         log_text = f"Relay {relay_number}: has been turned On"
+#         update_log(log_text)
+#         logged = True
+#
+#     if not active_flag and logged:
+#         # Use relay_number and state to log the event
+#         log_text = f"Relay {relay_number}: has been turned Off"
+#         update_log(log_text)
+#         logged = False
+
+
 def uptime():
     """
     Prints the current uptime of the Pico in a human-readable format.
@@ -242,6 +363,8 @@ def uptime():
     This function retrieves the current uptime of the Pico from its monotonic clock and converts it into
     a more human-readable format, including hours, minutes, and seconds. The resulting uptime is printed
     to the console in a clear and readable format.
+
+    :returns: none
     """
     # Get the current uptime in seconds from the Pico's monotonic clock.
     uptime_seconds = time.monotonic()
@@ -260,19 +383,19 @@ watering_days = []
 watering_times = []
 
 
-# Load schedule data from JSON file then create two lists.  One for watering_days and the other watering_times
 def load_schedule_data():
     """
     Load watering schedule data from a JSON file and create lists for watering days and times.
-
-    Returns:
-        list, list: Lists of watering days and watering times.
 
     This function reads a JSON file containing watering schedule data and creates two lists:
     one for watering days and the other for watering times. It retrieves the relay order from the JSON data,
     then iterates through each relay name in the order, appending the corresponding schedule and time data to the lists.
     The resulting lists are returned, and debug messages are printed during the process if the debug flag is set.
     If an error occurs while loading the data, empty lists are returned as a fallback.
+
+    :returns:
+        watering_days (list):  List of watering days for relays
+        watering_times (list): List of watering times for relays
     """
     global watering_days, watering_times
 
@@ -315,16 +438,16 @@ def is_watering_day(relay_bed_index, current_day):
     """
     Checks if the current day is a watering day for the specified garden bed.
 
-    Args:
-        relay_bed_index (int): Index of the garden bed's relay.
-        current_day (int): Current day of the week (0 to 6, where 0 is Monday and 6 is Sunday).
-
-    Returns:
-        bool: True if the garden bed should be watered on the current day, False otherwise.
-
     This function checks whether the specified garden bed should be watered on the current day based on the
     watering schedule. It takes the relay bed index and the current day of the week as input arguments.
     The function returns True if the garden bed should be watered on the current day, otherwise, it returns False.
+
+    :parameters:
+        relay_bed_index (int): Index of the garden bed's relay.
+        current_day (int): Current day of the week (0 to 6, where 0 is Monday and 6 is Sunday).
+
+    :returns:
+        current_day (bool): True if the garden bed should be watered on the current day, False otherwise.
     """
     return current_day in watering_days[relay_bed_index]
 
@@ -333,16 +456,16 @@ def is_watering_time(relay_bed_index, current_time):
     """
     Checks if the current time matches the watering time for the specified garden bed.
 
-    Args:
-        relay_bed_index (int): Index of the garden bed's relay.
-        current_time (tuple): Current time in (hour, minute) format.
-
-    Returns:
-        bool: True if the garden bed should be watered at the current time, False otherwise.
-
     This function compares the current time with the scheduled watering time for the specified garden bed.
     It takes the relay bed index and the current time in (hour, minute) format as input arguments.
     The function returns True if the garden bed should be watered at the current time, otherwise, it returns False.
+
+    :parameters:
+        relay_bed_index (int): Index of the garden bed's relay.
+        current_time (tuple): Current time in (hour, minute) format.
+
+    :returns:
+        current_time (bool): True if the garden bed should be watered at the current time, False otherwise.
     """
     return current_time == tuple(watering_times[relay_bed_index][:2])
 
@@ -352,16 +475,20 @@ manual_activation_flags = [False] * len(relays)  # When relay is manually activa
 schedule_running = [False] * len(relays)  # When a relay is activated due to schedule set its schedule running flag
 start_time = [time.struct_time((1970, 1, 1, 0, 0, 0, 3, 1, -1))] * len(relays)  # Initialize a list to store start time for each relay
 end_time = [-1] * len(relays)  # Initialize a list to store end time for each relay
+event_logged = [False] * len(relays)
 
 
 def check_manual_button():
     """
-    Checks the state of manual buttons and controls the corresponding relays.
+    Check the state of manual buttons and control the corresponding relays.
 
     This function iterates through each relay and its associated manual button to check if the manual button
     is pressed (active LOW), indicating a request for manual relay activation. If the button is pressed,
-    the corresponding relay is activated and a manual activation flag is set. If the button is released,
-    the relay is deactivated and the manual activation flag is reset.
+    the corresponding relay is activated, and a manual activation flag is set. If the button is released,
+    the relay is deactivated, and the manual activation flag is reset. Relay events are logged once when they
+    are turned on or off.
+
+    :returns: None
     """
     for i, manual_button_state in enumerate(buttons):
         # Check if the manual button is pressed (active LOW), indicating manual relay activation.
@@ -371,6 +498,12 @@ def check_manual_button():
             relays[i].value = RELAY_ACTIVE
             # Set the manual activation flag for the relay to True.
             manual_activation_flags[i] = True
+
+            if enable_logging and not event_logged[i]:
+                # Log the relay event with the relay number and state
+                update_log(f"Relay {relays[i]}: has been manually activated.")
+                event_logged[i] = True
+
         else:
             # If the manual button is not pressed.
             if not schedule_running[i]:  # We may have relay running under a schedule and don't want to turn it off.
@@ -379,21 +512,25 @@ def check_manual_button():
                 # Reset the manual activation flag for the relay to False.
                 manual_activation_flags[i] = False
 
+                if enable_logging and event_logged[i]:
+                    update_log(f"Relay {i}: has been manually deactivated.")
+                    event_logged[i] = False
+
 
 def calculate_end_time(start, duration_minutes):
     """
     Calculate the watering end time based on the provided start time and duration in minutes.
 
-    Args:
-        start (time.struct_time): The starting time as a time.struct_time object.
-        duration_minutes (int): The duration in minutes to add to the start time.
-
-    Returns:
-        time.struct_time: The calculated end time as a time.struct_time object.
-
     This function takes a starting time (in the form of a time.struct_time object) and a duration in minutes
     as inputs. It calculates the end time by adding the specified duration in minutes to the start time. The
     result is returned as a time.struct_time object representing the calculated end time.
+
+    :parameters:
+        start (time.struct_time): The starting time as a time.struct_time object.
+        duration_minutes (int): The duration in minutes to add to the start time.
+
+    :returns:
+        end_time_local (time.struct_time): The calculated end time as a time.struct_time object.
     """
     start_timestamp = time.mktime(start)
     end_timestamp = start_timestamp + (duration_minutes * 60)
@@ -409,12 +546,15 @@ def print_relay_properties():
     These properties include the relay index, current time, manual activation flag, watering start time, watering end time,
     schedule running status,watering days, and watering times. This information can be helpful for debugging and
     monitoring the behavior of the relays and their associated schedules.
+
+    :returns: None
     """
     for relay_index in range(len(relays)):
         print("\n")
         print(f"Relay Index: {relay_index}")
         current_date_time = rtc.RTC().datetime  # Get current time and day of the week from Pico RTC.
-        current_time = (current_date_time.tm_hour, current_date_time.tm_min, current_date_time.tm_sec)  # Extract the current time as a tuple (hour, minute)
+        current_time = (current_date_time.tm_hour, current_date_time.tm_min,
+                        current_date_time.tm_sec)  # Extract the current time as a tuple (hour, minute)
         print(f"Current Time: {current_time}")  # hour, minute and seconds
         print(f"Manual Activation Flag: {manual_activation_flags[relay_index]}")
         print(f"Watering Days: {watering_days[relay_index]}")
@@ -458,6 +598,10 @@ def main_loop():
 
                 check_manual_button()  # Check for any manual buttons being pushed
                 load_schedule_data()  # Reload schedule data
+
+                #  If True a log file will be created on Pico which will record the following log_ items
+                if enable_logging:
+                    log_cpu_temp()
 
                 # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
                 if pause_schedule_button.value:
@@ -503,6 +647,18 @@ def main_loop():
         time.sleep(1)  # Wait for 1 second before exiting.
 
 
-# Call the main function
+# Prepare to run the main loop.
 if __name__ == "__main__":
+    # Check if the log file exists
+    try:
+        with open(log_filename, "r"):
+            pass  # File exists, do nothing
+    except OSError:
+        # File doesn't exist, create it
+        with open(log_filename, "a"):
+            pass  # Create an empty file
+
+    # At this point, the log file exists or has been created if needed
+
+    # Now, proceed to run the main loop of the script
     main_loop()

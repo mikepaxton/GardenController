@@ -1,8 +1,77 @@
 Garden Control System with Raspberry Pi Pico W and CircuitPython
 
-Author: Mike Paxton
-Modification Date: 08/17/2023
+Author: Mike Paxton 
+Modification Date: 08/28/2023
 CircuitPython Version: 8.2.2
+
+TODO: The current set_rtc_datetime function grabs unixtime, raw_offset and DST (daylight savings) to calculate and
+ set the real time clock built into the Pico. It would be nice to just grab datetime and find a way to parse and format
+ the variable.  Would make the code much cleaner.
+
+TODO: Create a web interface of some sort which will allow us to modify the schedule and/or turn on/off relays.
+
+TODO: Look into using the Bluetooth soil moisture sensors the I purchased when switchdocs stopped selling
+ raspberry pi project parts. It appears the currently CircuitPython does not support the Pico.  No libraries found.
+ I might be able to use Home Assistants built in ability to use Bluetooth/Wi-Fi devices and tie them in with the Pico
+ using HA conditions.  I'm pretty sure I saw a YouTube video doing just this with the Bluetooth
+ moisture sensors i'm using.
+TODO:  Integrate Adafruit's 16x2 RGB Character Display w/i2c backpack.  Use the display and its 5 buttons to 
+add/remove relays as well as modify each relays schedule. This will be the primary means of editing relays and their 
+schedules.
+
+Breakdown of current code:
+
+Automated Garden Watering System
+
+This script manages an automated garden watering system using a Raspberry Pi Pico microcontroller.
+The system controls multiple relays, each associated with a garden bed. It supports manual relay activation,
+automated scheduling, and logging of events and system status.
+
+Modules:
+BUILT-IN Modules
+- os: Provides functions for interacting with the operating system.
+- ssl: Provides SSL (Secure Sockets Layer) protocol functions.
+- wifi: Provides Wi-Fi connectivity features.
+- socketpool: Provides a socket pool for handling network connections.
+- digitalio: Provides digital I/O (input/output) functionality.
+- board: Provides pin definitions for the board.
+- time: Provides time-related functions.
+- rtc: Provides access to the Real-Time Clock (RTC) module.
+- microcontroller: Provides access to microcontroller-specific features.
+- json: Provides functions for working with JSON (JavaScript Object Notation) data.
+NON-BUILT-IN Modules - Must install in /lib folder
+- adafruit_requests: Provides a session for making HTTP requests.
+
+Global Constants:
+- RELAY_ACTIVE: Constant indicating relay activation.
+- RELAY_INACTIVE: Constant indicating relay deactivation.
+
+Global Variables:
+- debug: Boolean indicating whether to print debug messages.
+- enable_logging: Boolean indicating whether to enable event logging.
+- log_interval: Time interval in minutes for updating the log file.
+- log_filename: Name of the log file.
+
+Functions:
+- flash_led(times, on_duration, off_duration): Flashes the onboard LED with specified timings.
+- wifi_connect(max_retries, retry_interval, simulate_failure): Establishes Wi-Fi connection.
+- get_local_time(): Retrieves current local time from an online time API.
+- set_rtc_datetime(): Sets Pico's RTC with current local time.
+- update_log(log_text): Updates log file with provided text and date/time.
+- cpu_temp(): Retrieves Pico's CPU temperature in Celsius.
+- log_cpu_temp(): Logs CPU temperature to the log file at specified intervals.
+- uptime(): Prints Pico's current uptime.
+- load_schedule_data(): Loads watering schedule data from a JSON file.
+- is_watering_day(relay_bed_index, current_day): Checks if it's a watering day for a garden bed.
+- is_watering_time(relay_bed_index, current_time): Checks if it's a watering time for a garden bed.
+- check_manual_button(): Checks state of manual buttons and controls relays.
+- calculate_end_time(start, duration_minutes): Calculates watering end time.
+- print_relay_properties(): Prints relay properties for debugging.
+- main_loop(): Main loop managing relay control and scheduling.
+
+Main Execution:
+- Creates or verifies the existence of the log file.
+- Enters the main loop to manage relay control and scheduling.
 
 Introduction
 
@@ -37,6 +106,28 @@ match your Wi-Fi network credentials.
 JSON Schedule: Update the Water_Schedule.json file with your desired watering schedule. The file is organized with 
 each garden bed's schedule and watering times.
 
+ * Relays
+   * Relay 0 ------------------  GPIO-0
+   * Relay 1 ------------------  GPIO-1
+   * Relay 2 ------------------  GPIO-2
+   * Relay 3 ------------------  GPIO-3
+   * Relay 4 ------------------  GPIO-4
+   * Relay 5 ------------------  GPIO-5
+   * Relay 6 ------------------  GPIO-6
+   * Relay 7 ------------------  GPIO-7
+ * Relay Manual On/Off Buttons
+   * Relay 0 Button -----------  GPIO-8
+   * Relay 1 Button -----------  GPIO-9
+   * Relay 2 Button -----------  GPIO-10
+   * Relay 3 Button -----------  GPIO-11
+   * Relay 4 Button -----------  GPIO-12
+   * Relay 5 Button -----------  GPIO-13
+   * Relay 6 Button -----------  GPIO-14
+   * Relay 7 Button -----------  GPIO-15
+ * Other GPIO Pins Used
+   * Pause Schedule Button ----- GPIO-16
+     * LCD Backlight ----------- GPIO-28
+
 Usage
 
 Automated Scheduling: The system will automatically water the garden beds based on the schedule specified in the 
@@ -53,21 +144,6 @@ attempts and intervals.
 Ensure that the GPIO pins for relays and buttons are correctly connected to the Raspberry Pi Pico according to the 
 provided assignments.
 Double-check the formatting of the Water_Schedule.json file to avoid errors in the watering schedule.
-
-Below this are my working notes for the system.  As this is a work in progress these notes will change over time.
-
-TODO: The current set_rtc_datetime function grabs unixtime, raw_offset and DST (daylight savings) to calculate and
- set the real time clock built into the Pico. It would be nice to just grab datetime and find a way to parse and format
- the variable.  Would make the code much cleaner.
-
-TODO: Create a web interface of some sort which will allow us to modify the schedule and/or turn on/off relays.
-
-TODO: Look into using the Bluetooth soil moisture sensors the I purchased when switchdocs stopped selling
- raspberry pi project parts. It appears the currently CircuitPython does not support the Pico.  No libraries found.
- I might be able to use Home Assistants built in ability to use Bluetooth/Wi-Fi devices and tie them in with the Pico
- using HA conditions.  I'm pretty sure I saw a YouTube video doing just this with the Bluetooth
- moisture sensors i'm using.
-
 
 How the system should function:
 Each garden bed will have its own 12v solenoid and a corresponding button to activate/deactivate it.
