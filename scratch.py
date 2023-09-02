@@ -1,8 +1,7 @@
 """
 ****************************************************************************************************************
-NOTE:  This code is by no means done.  It is a work in progress.
-Most of the time I only commit working code to GitHub but there still is a chance some of the code may fail.
-I don't always have time to check the code in a working environment.
+NOTE:  The code in this file is the iteration where I experiment with alterations and new features to main.py.
+ It's important to note that this code is not intended for deployment in a functional environment.
 ****************************************************************************************************************
 
 Author: Mike Paxton
@@ -245,11 +244,11 @@ def set_rtc_datetime():
     if debug: print(f"Formatted Time: {current_time.tm_hour:d}:{current_time.tm_min:02d}:{current_time.tm_sec:02}")
 
 
-def update_log(log_text):
+def log_data(log_text):
     """
     Update a log file with the provided text, date, and time.
 
-    If log_update is True/Enabled, this function takes a text string as input and appends it to a
+    If enable_logging is True/Enabled, this function takes a text string as input and appends it to a
     log file along with the current date and time obtained from the RTC (Real Time Clock) module.
     The date and time are formatted as: "YYYY-MM-DD HH:MM:SS".
 
@@ -325,7 +324,7 @@ def log_cpu_temp():
             log_text = f"CPU Temp: {cpu_temperature:.2f} °C"
 
             # Update the log with the CPU temperature
-            update_log(log_text)
+            log_data(log_text)
     except OSError:
         pass
 
@@ -346,13 +345,13 @@ def log_cpu_temp():
 #     if active_flag and not logged:
 #         # Use relay_number and state to log the event
 #         log_text = f"Relay {relay_number}: has been turned On"
-#         update_log(log_text)
+#         log_data(log_text)
 #         logged = True
 #
 #     if not active_flag and logged:
 #         # Use relay_number and state to log the event
 #         log_text = f"Relay {relay_number}: has been turned Off"
-#         update_log(log_text)
+#         log_data(log_text)
 #         logged = False
 
 
@@ -499,10 +498,11 @@ def check_manual_button():
             # Set the manual activation flag for the relay to True.
             manual_activation_flags[i] = True
 
+            # If logging is enabled and the event has not yet been logged, log it.
             if enable_logging and not event_logged[i]:
                 # Log the relay event with the relay number and state
-                update_log(f"Relay {relays[i]}: has been manually activated.")
-                event_logged[i] = True
+                log_data(f"Relay {relays[i]}: has been manually activated.")
+                event_logged[i] = True  # Set relays event logged flag to True
 
         else:
             # If the manual button is not pressed.
@@ -512,9 +512,10 @@ def check_manual_button():
                 # Reset the manual activation flag for the relay to False.
                 manual_activation_flags[i] = False
 
+                # if logging is enabled and the event HAS been logged, log the deactivation of relay.
                 if enable_logging and event_logged[i]:
-                    update_log(f"Relay {i}: has been manually deactivated.")
-                    event_logged[i] = False
+                    log_data(f"Relay {i}: has been manually deactivated.")
+                    event_logged[i] = False  # set relays event logged flag to False
 
 
 def calculate_end_time(start, duration_minutes):
