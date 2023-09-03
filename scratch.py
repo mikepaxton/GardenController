@@ -22,13 +22,24 @@ A Pause Schedule Button has been added which when pressed will put the automated
 great for days when it's raining, and you don't want the system to run.
 You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
-I've added a basic log file to record specific events.
+Pico Boot in Write Mode:
+NOTE:  I've added a basic log file to record specific events.
+If you use this feature you will need to make sure the Pico is in Write mode which by default they are NOT.
+There are two ways in which you can do this.
+The first way is to simply use the provided file "boot_write_no_gpio.py".  If you rename this file boot.py and place
+in the root directory of the Pico, upon next boot the Pico will be placed in Write mode which allows the Pico to
+data log.
+The seconds method is by using the file "boot_write_with_gpio.py".  This method allows you to switch the Pico from
+Write mode to Read-only mode by using a button.
+To use this, rename the file to boot.py and place it in the root directory of the Pico.  Hook up an on/off button to
+GPIO pin 18 and ground.  When the button is pressed (On) and the Pico is rebooted, it will boot into Write mode.
 
 """
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc, microcontroller
 import json
+import supervisor, storage
 #from lcd_controller import LcdController
 
 # Create an instance of the LcdController class
@@ -41,13 +52,18 @@ debug = False
 # Enable or disable log updates. If True, the system will update log.txt with logged information.
 # NOTE: Enabling logging will use some of Pico's precious memory. Make sure to limit log_interval
 # to avoid memory constraints.
+
+# Define the name of the log file
+log_filename = "log.txt"
+
+# Enable logging certain events to log.txt file.
+# NOTE:  To use this feature you must have the Pico in Write Mode which by default it is not.
+# Please read the Pico Boot in Write Mode NOTE above in the program description.
 enable_logging = True
 
 # If logging is enabled, log_interval specifies how many minutes must pass before updating the log file.
 log_interval = 1
 
-# Define the name of the log file
-log_filename = "log.txt"
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
 # RELAY_ACTIVE is used to indicate that a relay is turned on or activated.
@@ -93,6 +109,34 @@ pause_schedule_button.pull = Pull.UP
 # # Define onboard LED and set it to OUTPUT
 led = DigitalInOut(board.LED)
 led.direction = Direction.OUTPUT
+
+
+def check_for_logging():
+    """
+    Check for the existence of a log file and create it if necessary.
+
+    This function checks if event logging is enabled. If logging is enabled and
+    a 'log.txt' file does not exist in the current directory, it creates an
+    empty 'log.txt' file.
+
+    :parameter:
+        None
+
+    :return:
+        None
+
+    Example:
+        check_for_logging()
+    """
+    if enable_logging:
+        # # Check if the log file exists
+        try:
+            with open(log_filename, "r"):
+                pass  # File exists, do nothing
+        except OSError:
+            # File doesn't exist, create it
+            with open(log_filename, "a"):
+                pass  # Create an empty file
 
 
 def flash_led(times, on_duration, off_duration):
@@ -274,12 +318,10 @@ def log_data(log_text):
             with open(log_filename, "a") as log_file:
                 print(f"Log Entry: {log_entry}")
                 log_file.write(log_entry)
-                print("Write")
                 log_file.flush()
-                print("flushed")
-        except OSError:
-            print("Could not update file! File system might be read-only.")
-            pass
+                if debug: print("Event Logged!")
+        except OSError as e:
+            print(f"Unexpected error: {e}")
 
 
 def cpu_temp():
@@ -298,14 +340,17 @@ def cpu_temp():
     return temp
 
 
-def log_cpu_temp():
+def log_cpu_temp(duration):
     """
     Logs the current CPU temperature in Celsius to a log file if more than X minutes have passed since the last entry.
 
-    This function checks the last modification time of the specified log file. If the time elapsed since the last log entry
-    is greater than or equal to the specified log interval in minutes, it retrieves the current CPU temperature and creates
-    a log entry with the temperature information. The log entry is appended to the log file along with the current date
-    and time.
+    This function takes an integer in minutes and converts the duration to seconds then checks the last modification
+    time of the specified log file. If the time elapsed since the last log entry is greater than or equal to the
+    specified log interval in minutes, it retrieves the current CPU temperature and creates a log entry with the
+    temperature information. The log entry is appended to the log file along with the current date and time.
+
+    :parameter:
+                duration (int): How often will cpu temp get logged in minutes.
 
     :returns: None
     """
@@ -318,7 +363,7 @@ def log_cpu_temp():
         last_mod_time = stat_result[8]  # Index 8 corresponds to st_mtime
         # Check if the time elapsed since the last log entry is greater than or equal to the specified log interval
         # in seconds.  Convert log_interval from minutes to seconds by multiplying it by 60.
-        if current_time - last_mod_time >= (log_interval * 60):
+        if current_time - last_mod_time >= (log_interval * duration * 60):
             # Get CPU temperature
             cpu_temperature = cpu_temp()
             log_text = f"CPU Temp: {cpu_temperature:.2f} °C"
@@ -327,32 +372,6 @@ def log_cpu_temp():
             log_data(log_text)
     except OSError:
         pass
-
-
-# def log_relay_event(relay_number, active_flag):
-#     """
-#     Logs a relay event along with the relay number and its state.
-#
-#     :param relay_number: The number of the relay.
-#     :type relay_number: int
-#     :param active_flag: manual_activation_flag for relay
-#     :type active_flag bool
-#
-#     :return: None
-#     """
-#     global log_filename, logged
-#
-#     if active_flag and not logged:
-#         # Use relay_number and state to log the event
-#         log_text = f"Relay {relay_number}: has been turned On"
-#         log_data(log_text)
-#         logged = True
-#
-#     if not active_flag and logged:
-#         # Use relay_number and state to log the event
-#         log_text = f"Relay {relay_number}: has been turned Off"
-#         log_data(log_text)
-#         logged = False
 
 
 def uptime():
@@ -501,7 +520,7 @@ def check_manual_button():
             # If logging is enabled and the event has not yet been logged, log it.
             if enable_logging and not event_logged[i]:
                 # Log the relay event with the relay number and state
-                log_data(f"Relay {relays[i]}: has been manually activated.")
+                log_data(f"Relay {i}: was manually activated.")
                 event_logged[i] = True  # Set relays event logged flag to True
 
         else:
@@ -514,7 +533,7 @@ def check_manual_button():
 
                 # if logging is enabled and the event HAS been logged, log the deactivation of relay.
                 if enable_logging and event_logged[i]:
-                    log_data(f"Relay {i}: has been manually deactivated.")
+                    log_data(f"Relay {i}: was manually deactivated.")
                     event_logged[i] = False  # set relays event logged flag to False
 
 
@@ -602,7 +621,7 @@ def main_loop():
 
                 #  If True a log file will be created on Pico which will record the following log_ items
                 if enable_logging:
-                    log_cpu_temp()
+                    log_cpu_temp(1)  # Log cpu temp.  Parameter is minutes.
 
                 # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
                 if pause_schedule_button.value:
@@ -615,6 +634,11 @@ def main_loop():
                                 start_time[i] = rtc.RTC().datetime  # Record the start time
                                 end_time[i] = calculate_end_time(start_time[i], watering_times[i][2])
                                 schedule_running[i] = True
+                                # Check for event logging
+                                if enable_logging and not event_logged[i]:
+                                    # Log the relay event with the relay number and state
+                                    log_data(f"Relay {i}: was activated via schedule.")
+                                    event_logged[i] = True  # Set relays event logged flag to True
                             else:
                                 if debug: print(f"Relay {i} for Garden Bed {i + 1} was been manually activated")
 
@@ -622,6 +646,10 @@ def main_loop():
                             relays[i].value = RELAY_INACTIVE
                             schedule_running[i] = False
                             end_time[i] = -1
+                            # if event logging is enabled and the event HAS been logged, log the deactivation of relay.
+                            if enable_logging and event_logged[i]:
+                                log_data(f"Relay {i}: was deactivated via schedule.")
+                                event_logged[i] = False  # set relays event logged flag to False
 
                 else:
                     if debug: print("Scheduling paused")
@@ -631,7 +659,7 @@ def main_loop():
                             schedule_running[i] = False
                             end_time[i] = -1
 
-                uptime()  # Print the Pico's uptime to the console.
+                uptime()  # Print the Pico's uptime to the console. I use this as a heartbeat indicator in REPL
                 if debug: print_relay_properties()
                 time.sleep(1.5)  # Add a short delay to prevent tight looping causing excessive CPU processing
 
@@ -650,16 +678,8 @@ def main_loop():
 
 # Prepare to run the main loop.
 if __name__ == "__main__":
-    # Check if the log file exists
-    try:
-        with open(log_filename, "r"):
-            pass  # File exists, do nothing
-    except OSError:
-        # File doesn't exist, create it
-        with open(log_filename, "a"):
-            pass  # Create an empty file
 
-    # At this point, the log file exists or has been created if needed
+    # Check if event logging is enabled (enable_logging = True) Will get an error here
+    check_for_logging()
+    main_loop()  # Run main loop
 
-    # Now, proceed to run the main loop of the script
-    main_loop()
