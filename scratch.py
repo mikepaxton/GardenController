@@ -5,7 +5,7 @@ NOTE:  The code in this file is the iteration where I experiment with alteration
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Modification Date: 08/28/2023
+Modification Date: 09/03/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
@@ -13,33 +13,27 @@ CircuitPython.  The system is being designed to work off a solar system so contr
 
 I'm using an 8 channel relay along with 8 buttons to control each relay channel.
 
-I've incorporated a simple automated scheduling system which allows for specifying the days of the week, time of day
-and duration each garden bed relay runs.  Currently, each garden bed relay can only run once per day using the
-automated scheduling.  However, you can always use the manual button to activate a relay and let it run the desired
-amount of time, then manually turn it off.
+I've incorporated a simple automated scheduling system which allows for specifying the days of the week, times of day
+and duration each garden bed relay runs.  Additionally, you can use the manual buttons to activate and deactivate the
+relays.
 
 A Pause Schedule Button has been added which when pressed will put the automated scheduling system on hold. This works
 great for days when it's raining, and you don't want the system to run.
 You can still use the manual relay buttons to run any of the relays while scheduling is paused.
 
-Pico Boot in Write Mode:
-NOTE:  I've added a basic log file to record specific events.
-If you use this feature you will need to make sure the Pico is in Write mode which by default they are NOT.
-There are two ways in which you can do this.
-The first way is to simply use the provided file "boot_write_no_gpio.py".  If you rename this file boot.py and place
-in the root directory of the Pico, upon next boot the Pico will be placed in Write mode which allows the Pico to
-data log.
-The seconds method is by using the file "boot_write_with_gpio.py".  This method allows you to switch the Pico from
-Write mode to Read-only mode by using a button.
-To use this, rename the file to boot.py and place it in the root directory of the Pico.  Hook up an on/off button to
-GPIO pin 18 and ground.  When the button is pressed (On) and the Pico is rebooted, it will boot into Write mode.
+Booting the Pico in Write Mode:
+
+**Note:** By default, the Raspberry Pi Pico's CIRCUITPY filesystem is set to read-only by the Pico.
+This configuration allows the host computer to write to and update files on the Pico. However, since this program
+requires the ability to write to the filesystem for event logging and modifying relay schedules, a specific boot.py
+file must be installed and placed at the root level of the CIRCUITPY filesystem. For more information,
+please refer to the "Note" section in the boot.py file.
 
 """
 import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc, microcontroller
 import json
-import supervisor, storage
 #from lcd_controller import LcdController
 
 # Create an instance of the LcdController class
@@ -63,7 +57,6 @@ enable_logging = True
 
 # If logging is enabled, log_interval specifies how many minutes must pass before updating the log file.
 log_interval = 1
-
 
 # Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
 # RELAY_ACTIVE is used to indicate that a relay is turned on or activated.
@@ -155,6 +148,9 @@ def flash_led(times, on_duration, off_duration):
         off_duration (float): Duration in seconds to keep the LED off between flashes.
 
     :returns: None
+
+    Example: flash_led(4, 1, .1) or flash_led(times=4, on_duration=1, off_duration=.1)
+
     """
     for _ in range(times):
         led.value = True  # Turn on the LED
@@ -180,6 +176,8 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
         simulate_failure (bool): If True, simulates a connection failure for testing purposes.
 
     :returns: None
+
+    Example: wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)
     """
     retries = 0
 
@@ -302,6 +300,8 @@ def log_data(log_text):
         log_text: (str): The text to be added to the log.
 
     :returns: None
+
+    Example: log_data(f"Relay {i}: was activated")
     """
     global log_filename
 
@@ -321,7 +321,7 @@ def log_data(log_text):
                 log_file.flush()
                 if debug: print("Event Logged!")
         except OSError as e:
-            print(f"Unexpected error: {e}")
+            print(f"Unexpected error in log_data(): {e}")
 
 
 def cpu_temp():
@@ -340,17 +340,16 @@ def cpu_temp():
     return temp
 
 
-def log_cpu_temp(duration):
+def log_cpu_temp():
     """
     Logs the current CPU temperature in Celsius to a log file if more than X minutes have passed since the last entry.
 
-    This function takes an integer in minutes and converts the duration to seconds then checks the last modification
-    time of the specified log file. If the time elapsed since the last log entry is greater than or equal to the
-    specified log interval in minutes, it retrieves the current CPU temperature and creates a log entry with the
-    temperature information. The log entry is appended to the log file along with the current date and time.
+    This function checks the last modification time of the specified log file. If the time elapsed since the last
+    log entry is greater than or equal to the specified log interval in minutes, it retrieves the current
+    CPU temperature and creates a log entry with the temperature information. The log entry is appended to the
+    log file along with the current date and time.
 
-    :parameter:
-                duration (int): How often will cpu temp get logged in minutes.
+    :parameter: None
 
     :returns: None
     """
@@ -363,7 +362,7 @@ def log_cpu_temp(duration):
         last_mod_time = stat_result[8]  # Index 8 corresponds to st_mtime
         # Check if the time elapsed since the last log entry is greater than or equal to the specified log interval
         # in seconds.  Convert log_interval from minutes to seconds by multiplying it by 60.
-        if current_time - last_mod_time >= (log_interval * duration * 60):
+        if current_time - last_mod_time >= (log_interval * 60):
             # Get CPU temperature
             cpu_temperature = cpu_temp()
             log_text = f"CPU Temp: {cpu_temperature:.2f} °C"
@@ -423,8 +422,8 @@ def load_schedule_data():
             # Load JSON data from the file
             schedule_data = json.load(file)
 
-            # Get the relay order from the JSON data
-            relay_order = schedule_data["relay_order"]
+            # Extract and sort the keys from "watering_days" that start with "relay" in alphabetical order
+            relay_order = sorted([key for key in schedule_data["watering_days"] if key.startswith("relay")])
 
             # Reset the lists before populating them as we are using .append to build each list
             watering_days = []
@@ -438,7 +437,8 @@ def load_schedule_data():
                 else:
                     print(f"Relay {relay_name} not found in schedule data.")
 
-            # Print out both lists to the console
+            # Print oout lists to the console
+            if debug: print(f"Relay Order: {relay_order}")
             if debug: print(f"Garden Bed Schedule List: {watering_days}")
             if debug: print(f"Watering Times List: {watering_times}")
 
@@ -462,30 +462,35 @@ def is_watering_day(relay_bed_index, current_day):
 
     :parameters:
         relay_bed_index (int): Index of the garden bed's relay.
-        current_day (int): Current day of the week (0 to 6, where 0 is Monday and 6 is Sunday).
+        current_day (int): Current day of the week (0 to 7, where 0 is Monday, 6 is Sunday and 7 is every day ).
 
     :returns:
         current_day (bool): True if the garden bed should be watered on the current day, False otherwise.
     """
+    if 7 in watering_days[relay_bed_index]:
+        return True
     return current_day in watering_days[relay_bed_index]
 
 
 def is_watering_time(relay_bed_index, current_time):
     """
-    Checks if the current time matches the watering time for the specified garden bed.
+    Checks if the current time matches any of the watering times for the specified garden bed.
 
-    This function compares the current time with the scheduled watering time for the specified garden bed.
-    It takes the relay bed index and the current time in (hour, minute) format as input arguments.
-    The function returns True if the garden bed should be watered at the current time, otherwise, it returns False.
-
-    :parameters:
+    Args:
         relay_bed_index (int): Index of the garden bed's relay.
         current_time (tuple): Current time in (hour, minute) format.
 
-    :returns:
-        current_time (bool): True if the garden bed should be watered at the current time, False otherwise.
+    Returns:
+        bool: True if the garden bed should be watered at the current time, False otherwise.
+
+    This function compares the current time with the scheduled watering times for the specified garden bed.
+    It takes the relay bed index and the current time in (hour, minute) format as input arguments.
+    The function returns True if the garden bed should be watered at the current time, otherwise, it returns False.
     """
-    return current_time == tuple(watering_times[relay_bed_index][:2])
+    for watering_time in watering_times[relay_bed_index]:
+        if current_time == tuple(watering_time[:2]):
+            return True, watering_time[2]
+    return False, 0
 
 
 # Define variables for the main loop.
@@ -542,8 +547,8 @@ def calculate_end_time(start, duration_minutes):
     Calculate the watering end time based on the provided start time and duration in minutes.
 
     This function takes a starting time (in the form of a time.struct_time object) and a duration in minutes
-    as inputs. It calculates the end time by adding the specified duration in minutes to the start time. The
-    result is returned as a time.struct_time object representing the calculated end time.
+    as inputs. The end time is calculated by multiplying the duration in minutes by 60 then adding that to start_time.
+    The result is returned as a time.struct_time object representing the calculated end time.
 
     :parameters:
         start (time.struct_time): The starting time as a time.struct_time object.
@@ -596,84 +601,91 @@ def main_loop():
     and the properties of each relay for debugging purposes.
     """
     try:
-        wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)  # Attempt to connect to Wi-Fi
-        set_rtc_datetime()  # Get current local day of week and time from the Internet and update RTC
+        # Attempt to connect to Wi-Fi
+        wifi_connect(max_retries=3, retry_interval=10, simulate_failure=False)
 
-        while True:  # Continuously loop to monitor and manage relay control and scheduling.
+        # Get current local day of the week and time from the Internet and update RTC
+        set_rtc_datetime()
+
+        while True:
             try:
                 if debug: print("Entering main loop...")
 
                 # Get the current date and time from the Pico's Real-Time Clock (RTC).
                 current_date_time = rtc.RTC().datetime
-                # Extract the current day of the week (0-6, where Monday is 0) from the RTC date and time.
-                current_day = current_date_time.tm_wday
-                # Extract the current time as a tuple (hour, minute) from the RTC date and time.
-                current_time = (current_date_time.tm_hour, current_date_time.tm_min)
+                current_day = current_date_time.tm_wday  # Extract the current day of the week (0-6, Monday is 0)
+                current_time = (current_date_time.tm_hour, current_date_time.tm_min)  # Current time as (hour, minute)
 
-                # Define a list of weekday names for debug printing use
-                weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                if debug: print("Current day:", current_day, "(", weekday_names[current_day], ")")
-                if debug: print("Current Real Time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
-                if debug: print(f"Current Structured Time: {current_time}")
+                if debug:
+                    # Define a list of weekday names for debug use
+                    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                    print("Current day:", current_day, "(", weekday_names[current_day], ")")
+                    print("Current Real Time:", f"{current_time[0]:02d}:{current_time[1]:02d}")
+                    print(f"Current Structured Time: {current_time}")
 
                 check_manual_button()  # Check for any manual buttons being pushed
                 load_schedule_data()  # Reload schedule data
 
-                #  If True a log file will be created on Pico which will record the following log_ items
-                if enable_logging:
-                    log_cpu_temp(1)  # Log cpu temp.  Parameter is minutes.
-
-                # Check if the pause_schedule_button is not pressed (active LOW) to proceed with automated scheduling.
                 if pause_schedule_button.value:
                     if debug: print("Scheduling active")
-                    # Iterate through each relay to determine automated scheduling.
                     for i in range(len(relays)):
-                        if is_watering_day(i, current_day) and is_watering_time(i, current_time):
+                        # Check if the relays watering time matches current time and get the duration
+                        watering_result, watering_duration = is_watering_time(i, current_time)
+                        if is_watering_day(i, current_day) and watering_result:
                             if not manual_activation_flags[i] and end_time[i] == -1:
+                                # Activate relay and set its start and end times
                                 relays[i].value = RELAY_ACTIVE
-                                start_time[i] = rtc.RTC().datetime  # Record the start time
-                                end_time[i] = calculate_end_time(start_time[i], watering_times[i][2])
+                                start_time[i] = rtc.RTC().datetime
+                                end_time[i] = calculate_end_time(start_time[i], watering_duration)
                                 schedule_running[i] = True
-                                # Check for event logging
+
                                 if enable_logging and not event_logged[i]:
-                                    # Log the relay event with the relay number and state
+                                    # Log the scheduled relay event
                                     log_data(f"Relay {i}: was activated via schedule.")
-                                    event_logged[i] = True  # Set relays event logged flag to True
+                                    event_logged[i] = True
+
                             else:
-                                if debug: print(f"Relay {i} for Garden Bed {i + 1} was been manually activated")
+                                if debug: print(f"Relay {i} for Garden Bed {i + 1} was manually activated")
 
                         if schedule_running[i] and end_time[i] <= rtc.RTC().datetime:
+                            # Deactivate relay if the end time is reached
                             relays[i].value = RELAY_INACTIVE
                             schedule_running[i] = False
                             end_time[i] = -1
-                            # if event logging is enabled and the event HAS been logged, log the deactivation of relay.
+
                             if enable_logging and event_logged[i]:
+                                # Log the deactivation of relay
                                 log_data(f"Relay {i}: was deactivated via schedule.")
-                                event_logged[i] = False  # set relays event logged flag to False
+                                event_logged[i] = False
 
                 else:
                     if debug: print("Scheduling paused")
                     for i in range(len(relays)):
                         if not manual_activation_flags[i]:
+                            # Deactivate relay if scheduling is paused
                             relays[i].value = RELAY_INACTIVE
                             schedule_running[i] = False
                             end_time[i] = -1
 
-                uptime()  # Print the Pico's uptime to the console. I use this as a heartbeat indicator in REPL
                 if debug: print_relay_properties()
-                time.sleep(1.5)  # Add a short delay to prevent tight looping causing excessive CPU processing
+
+                if enable_logging:
+                    log_cpu_temp()  # Log CPU temperature if logging is enabled
+
+                uptime()  # Print the Pico's uptime for debugging
+                time.sleep(1.5)  # Add a short delay to prevent excessive CPU processing
 
             except Exception as main_loop_error:
-                # Handle errors that occur in the main loop.
+                # Handle errors that occur in the main loop
                 print(f"Main Loop Error: {main_loop_error}")
-                flash_led(3, 0.1, 0.1)  # Flash the LED three times to indicate a main loop error.
-                time.sleep(1)  # Wait for 1 second before continuing.
+                flash_led(3, 0.1, 0.1)  # Flash the LED three times to indicate a main loop error
+                time.sleep(1)  # Wait for 1 second before continuing
 
     except Exception as main_error:
-        # Handle errors that occur before entering the main loop.
+        # Handle errors that occur before entering the main loop
         print(f"Main Error: {main_error}")
-        flash_led(5, 0.1, 0.1)  # Flash the LED five times to indicate a main error.
-        time.sleep(1)  # Wait for 1 second before exiting.
+        flash_led(5, 0.1, 0.1)  # Flash the LED five times to indicate a main error
+        time.sleep(1)  # Wait for 1 second before exiting
 
 
 # Prepare to run the main loop.
