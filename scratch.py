@@ -34,11 +34,8 @@ import os, ssl, wifi, socketpool, adafruit_requests
 from digitalio import DigitalInOut, Direction, Pull
 import board, time, rtc, microcontroller
 import json
-#from lcd_controller import LcdController
-
-# Create an instance of the LcdController class
-# lcd = LcdController  # Instantiate the LcdController class to control the LCD display and buttons.
-# lcd.set_backlight("green")  # Set the backlight color of the LCD display to green
+import adafruit_character_lcd.character_lcd_rgb_i2c as character_lcd
+import busio
 
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
 debug = False
@@ -208,7 +205,6 @@ def wifi_connect(max_retries=5, retry_interval=5, simulate_failure=False):
     flash_led(5, 0.1, 0.1)  # Flash LED 5 times, each flash is 0.1s on, 0.1s off
     time.sleep(1)  # Wait for 1 second before turning off the LED.
     led.value = False  # Turn off the LED.
-    #lcd.set_backlight("red")
 
 
 def get_local_time():
@@ -437,7 +433,7 @@ def load_schedule_data():
                 else:
                     print(f"Relay {relay_name} not found in schedule data.")
 
-            # Print oout lists to the console
+            # Print out lists to the console
             if debug: print(f"Relay Order: {relay_order}")
             if debug: print(f"Garden Bed Schedule List: {watering_days}")
             if debug: print(f"Watering Times List: {watering_times}")
@@ -606,6 +602,9 @@ def main_loop():
 
         # Get current local day of the week and time from the Internet and update RTC
         set_rtc_datetime()
+        # Set pause button logged to False on startup.
+
+        sched_pause_logged = False
 
         while True:
             try:
@@ -626,12 +625,20 @@ def main_loop():
                 check_manual_button()  # Check for any manual buttons being pushed
                 load_schedule_data()  # Reload schedule data
 
-                if pause_schedule_button.value:
+                if pause_schedule_button.value:  # Remember, buttons are activated LOW, pressed.
+                    
+                    if enable_logging and sched_pause_logged:
+                        # Log the schedule pause button being unpressed
+                        log_data("The schedule has been resumed.")
+                        sched_pause_logged = False
+                        
                     if debug: print("Scheduling active")
+
                     for i in range(len(relays)):
                         # Check if the relays watering time matches current time and get the duration
                         watering_result, watering_duration = is_watering_time(i, current_time)
                         if is_watering_day(i, current_day) and watering_result:
+
                             if not manual_activation_flags[i] and end_time[i] == -1:
                                 # Activate relay and set its start and end times
                                 relays[i].value = RELAY_ACTIVE
@@ -659,7 +666,12 @@ def main_loop():
                                 event_logged[i] = False
 
                 else:
+                    if enable_logging and not sched_pause_logged:
+                        log_data("Scheduling has been paused.")
+                        sched_pause_logged = True
+
                     if debug: print("Scheduling paused")
+
                     for i in range(len(relays)):
                         if not manual_activation_flags[i]:
                             # Deactivate relay if scheduling is paused
@@ -691,7 +703,7 @@ def main_loop():
 # Prepare to run the main loop.
 if __name__ == "__main__":
 
-    # Check if event logging is enabled (enable_logging = True) Will get an error here
+    # Check if event logging is enabled (enable_logging = True)
     check_for_logging()
     main_loop()  # Run main loop
 

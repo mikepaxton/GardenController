@@ -1,8 +1,14 @@
 import time
 import board, busio
-import adafruit_character_lcd.character_lcd_rgb_i2c as character_lcd
 from digitalio import DigitalInOut, Direction, Pull
+import adafruit_character_lcd.character_lcd_rgb_i2c as character_lcd
 
+# create I2C connection
+i2c = busio.I2C(board.GP27, board.GP26)  # # Pi Pico RP2040
+lcd = character_lcd.Character_LCD_RGB_I2C(i2c, 16, 2)
+
+lcd.color = [100, 0, 0]
+lcd.message = "Hello\nCircuitPython"
 
 class LcdController:
     def __init__(self):
@@ -128,6 +134,6 @@ class SchedMenu:
 
 
 # Create an instance of the LcdController class
-lcd = LcdController()
+#lcd = LcdController()
 # Create an instance of the SchedMenu class and pass the lcd instance to it
-shed_menu = SchedMenu(lcd)
+#shed_menu = SchedMenu(lcd)
