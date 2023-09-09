@@ -36,6 +36,8 @@ will loose the date/time.
 * /log.txt
 * /lib/adafruit_requests.py
 
+### Basic Installation Steps:
+
 1. Download and install the latest version of CircuitPython for the Raspberry Pico W.
 2. Clone this repository to your local machine using Git or by downloading the ZIP archive.
 3. Install dependencies listed below into the cloned Garden Controller folder.
@@ -90,7 +92,7 @@ The following is a list of the main components used.
    pip install adafruit-circuitpython-requests'
 ```
 
-## Managing Schedules
+## Managing Schedules:
 The system manages watering schedules using the load_schedule_data function, which reads schedule data from a JSON file.
 Each relay can be run on multiple days of the week by specifying 0-7 where 0 is Monday, 6 is Sunday and 7 is every day.
 If you want to water every day just place a 7 in the relays array (list).  
@@ -134,7 +136,7 @@ if you want to water a bed for two hours you would put 120 in the duration.
 Each relay can run multiple times per day, just additional lists to the desired relay.  Remember, formatting is 
 critical in json files.
 
-### For reference, this is the format the Pico RTC stores the date/time
+### For reference, this is the format the Pico RTC stores the date/time data:
 Current Time Format: struct_time(tm_year=2023, tm_mon=8, tm_mday=6, tm_hour=17, tm_min=51, tm_sec=40, tm_wday=6, tm_yday=218, tm_isdst=-1)
 
 ## Manual Activation
@@ -161,7 +163,7 @@ function checks the state of manual buttons and controls the corresponding relay
 
 ## CircuitPython Modules Used:
 
-### BUILT-IN Modules
+### BUILT-IN Modules:
 - os: Provides functions for interacting with the operating system.
 - ssl: Provides SSL (Secure Sockets Layer) protocol functions.
 - wifi: Provides Wi-Fi connectivity features.
@@ -172,7 +174,7 @@ function checks the state of manual buttons and controls the corresponding relay
 - rtc: Provides access to the Real-Time Clock (RTC) module.
 - microcontroller: Provides access to microcontroller-specific features.
 - json: Provides functions for working with JSON (JavaScript Object Notation) data.
-#### NON-BUILT-IN Modules - Must install in Pico /lib folder
+#### NON-BUILT-IN Modules - Must install in Pico /lib folder:
 - adafruit_requests: Provides a session for making HTTP requests.
 
 
