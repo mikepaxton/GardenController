@@ -1,12 +1,13 @@
 """
 ****************************************************************************************************************
-NOTE:  This code is by no means done.  It is a work in progress.
-Most of the time I only commit working code to GitHub but there still is a chance some of the code may fail.
-I don't always have time to check the code in a working environment.
+NOTE:  This code is a work in progress and is not finished, I still have several features I want to add.
+The two big features i'm currently working on are:
+Adding a 16x2 Character LCD with navigation buttons to allow for modifying the automated schedule.
+Incorporating a web page to allow for remote modification of the automated schedule.
 ****************************************************************************************************************
 
 Author: Mike Paxton
-Modification Date: 09/03/2023
+Modification Date: 10/14/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and

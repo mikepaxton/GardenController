@@ -85,7 +85,6 @@ The following is a list of the main components used.
    * All Buttons to ground
  * Other GPIO Pins Used
    * Pause Schedule Button ----- GPIO-16
-   * LCD Backlight ------------- GPIO-28 (Not implemented yet)
 
 **Dependencies**: Make sure you have the required libraries installed. You can install them using pip:
 ```
