@@ -9,7 +9,7 @@ Modification Date: 09/03/2023
 CircuitPython Version 8.2.2
 
 The purpose of this program is to control 8 relays for watering each of my garden beds using a Raspberry Pico and
-CircuitPython.  The system is being designed to work off a solar system so controlling battery usage is paramount.
+CircuitPython.  The system is being designed to work off a solar panel system so controlling battery usage is paramount.
 
 I'm using an 8 channel relay along with 8 buttons to control each relay channel.
 
@@ -37,6 +37,14 @@ import json
 import adafruit_character_lcd.character_lcd_rgb_i2c as character_lcd
 import busio
 
+# create I2C connection
+i2c = busio.I2C(board.GP27, board.GP26)  # # Pi Pico RP2040
+lcd = character_lcd.Character_LCD_RGB_I2C(i2c, 16, 2)
+
+lcd.color = [0, 100, 0]  # Set display backlight to Green
+lcd.message = "Garden\nController"
+
+
 # Setting debug too True will print out messages to REPL.  Set it too False to keep the processor load down.
 debug = False
 
@@ -44,25 +52,34 @@ debug = False
 # NOTE: Enabling logging will use some of Pico's precious memory. Make sure to limit log_interval
 # to avoid memory constraints.
 
-# Define the name of the log file
-log_filename = "log.txt"
-
 # Enable logging certain events to log.txt file.
 # NOTE:  To use this feature you must have the Pico in Write Mode which by default it is not.
 # Please read the Pico Boot in Write Mode NOTE above in the program description.
 enable_logging = True
 
-# If logging is enabled, log_interval specifies how many minutes must pass before updating the log file.
-log_interval = 1
+# Define the name of the log file
+log_filename = "log.txt"
 
-# Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
-# RELAY_ACTIVE is used to indicate that a relay is turned on or activated.
-# RELAY_INACTIVE is used to indicate that a relay is turned off or deactivated.
-# In this code, the relays are controlled by setting their values to these constants.
-# For most relay modules, activating a relay requires setting its GPIO pin to a logic level that energizes the relay.
-# The actual behavior may depend on how the relay module is connected and whether it is active LOW or active HIGH.
-# These constants help to provide clear and consistent names for the relay states throughout the code.
-# If your relay module operates differently, you can adjust the values of these constants accordingly.
+# Log interval (if enabled) specifies how many minutes must pass before updating the log file for certain events.
+# Does not affect scheduled events and buttons being pressed.
+log_interval = .5
+
+"""
+Constants for relay state: RELAY_ACTIVE and RELAY_INACTIVE
+
+- `RELAY_ACTIVE` is used to indicate that a relay is turned on or activated.
+- `RELAY_INACTIVE` is used to indicate that a relay is turned off or deactivated.
+
+In this code, the relays are controlled by setting their values to these constants. 
+For most relay modules, activating a relay requires setting its GPIO pin to a logic level that energizes it. 
+The actual behavior may depend on how the relay module is connected and whether it is active LOW or active HIGH.
+These constants help to provide clear and consistent names for the relay states throughout the code. 
+If your relay module operates differently, you can adjust the values of these constants accordingly.
+
+My relay is active LOW. In other words, when I set the relay pin to False (logic level 0 or LOW), the relay will be 
+activated or turned on. When I set the relay pin to True (logic level 1 or HIGH), the relay will be deactivated or 
+turned off.
+"""
 RELAY_ACTIVE = False
 RELAY_INACTIVE = True
 
@@ -99,6 +116,77 @@ pause_schedule_button.pull = Pull.UP
 # # Define onboard LED and set it to OUTPUT
 led = DigitalInOut(board.LED)
 led.direction = Direction.OUTPUT
+
+
+def load_relays_buttons():
+    # Open the Water_Schedule.json file for reading
+    with open('Water_Schedule.json', 'r') as file:
+        # Load JSON data from the file
+        schedule_data = json.load(file)
+        # Extract and sort the keys from "watering_days" that start with "relay" in alphabetical order
+        # Creates a list of relays
+        relay_order = sorted([key for key in schedule_data["watering_days"] if key.startswith("relay")])
+
+        # Define the mapping of relay names to reserved relay pins
+        reserved_relay_pins = {
+            "GP0": board.GP0,
+            "GP1": board.GP1,
+            "GP2": board.GP2,
+            "GP3": board.GP3,
+            "GP4": board.GP4,
+            "GP5": board.GP5,
+            "GP6": board.GP6,
+            "GP7": board.GP7,
+            "GP8": board.GP8,
+            "GP9": board.GP9,
+            "GP10": board.GP10,
+            "GP11": board.GP11,
+            "GP12": board.GP12
+            # Add more mappings as needed
+        }
+
+        # Define a dictionary for relay mappings (empty initially)
+        relay_pins = {}
+
+        for relay_name in relay_order:
+            # Check if the relay name from JSON matches a reserved name
+            if relay_name in reserved_relay_pins:
+                relay_pin = reserved_relay_pins[relay_name]
+                relay = DigitalInOut(relay_pin)
+                relay.direction = Direction.OUTPUT
+                relay.value = RELAY_INACTIVE
+                relays.append(relay)
+            else:
+                print(f"Warning: No GPIO mapping found for {relay_name}")
+
+            # Define the mapping of button names to reserved button pins
+            reserved_button_pins = {
+                "GP10": board.GP10,
+                "GP11": board.GP11,
+                "GP12": board.GP13,
+                # Add more mappings as needed
+            }
+
+            # Create DigitalInOut instances for reserved button pins
+            buttons = []
+            for button_name in reserved_relay_pins:
+                button_pin = reserved_button_pins[button_name]
+                button = DigitalInOut(button_pin)
+                button.direction = Direction.INPUT
+                button.pull = Pull.UP
+                buttons.append(button)
+
+            # Print out the list of mapped relays and buttons
+            print("Mapped Relays:")
+            for relay in relays:
+                print(relay)
+
+            print("Mapped Buttons:")
+            for button in buttons:
+                print(button)
+
+            return relays, buttons
+
 
 
 def check_for_logging():
@@ -666,6 +754,7 @@ def main_loop():
                                 event_logged[i] = False
 
                 else:
+                    lcd.color = (0, 0, 0)  # TODO:  For testing, Remove when done!
                     if enable_logging and not sched_pause_logged:
                         log_data("Scheduling has been paused.")
                         sched_pause_logged = True

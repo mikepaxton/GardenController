@@ -1,14 +1,15 @@
 import time
 import board, busio
-from digitalio import DigitalInOut, Direction, Pull
 import adafruit_character_lcd.character_lcd_rgb_i2c as character_lcd
 
 # create I2C connection
-i2c = busio.I2C(board.GP27, board.GP26)  # # Pi Pico RP2040
-lcd = character_lcd.Character_LCD_RGB_I2C(i2c, 16, 2)
+# i2c = busio.I2C(board.GP27, board.GP26)  # # Pi Pico RP2040
+# lcd = character_lcd.Character_LCD_RGB_I2C(i2c, 16, 2)
+#
+# lcd.color = [0, 100, 0]  # Set display backlight to Green
+# lcd.message = "Garden\nController"
+# time.sleep(3)
 
-lcd.color = [100, 0, 0]
-lcd.message = "Hello\nCircuitPython"
 
 class LcdController:
     def __init__(self):
@@ -18,15 +19,37 @@ class LcdController:
         This constructor initializes the I2C bus and connects to the LCD display.
         It also sets up the backlight control pin and turns on the backlight by default.
         """
-        i2c = board.I2C()  # Initialize the I2C bus (You might need to provide specific I2C parameters here)
+        i2c = busio.I2C(board.GP27, board.GP26)  # Initialize the I2C bus for Pico
         self.lcd = character_lcd.Character_LCD_RGB_I2C(i2c, 16, 2)  # Initialize the LCD display
 
         # Initialize the backlight control pin
-        self.backlight = DigitalInOut(board.D28)
-        self.backlight.direction = Direction.OUTPUT
-        self.backlight.value = True  # Turn on the backlight by default
-        self.current_menu = SchedMenu(self)
-        self.current_day = 0  # Initialize with Monday
+        # self.current_menu = SchedMenu(self)
+        # self.current_day = 0  # Initialize with Monday
+
+    def set_backlight_color(self, color):
+        # Define LCD colors using RGB values
+        lcd_color_red = [100, 0, 0]  # Red color
+        lcd_color_green = [0, 100, 0]  # Green color
+        lcd_color_blue = [0, 0, 100]  # Blue color
+        lcd_color_white = [100, 100, 100]  # White color (equal intensity of all components)
+        lcd_color_purple = [50, 0, 50]  # Set LCD color to purple
+        lcd_color_off = [0, 0, 0]  # Turn off display
+
+        # Set the backlight color based on the provided color parameter
+        if color == 'red':
+            r, g, b = lcd_color_red
+        elif color == 'green':
+            r, g, b = lcd_color_green
+        elif color == 'blue':
+            r, g, b = lcd_color_blue
+        elif color == 'white':
+            r, g, b = lcd_color_white
+        elif color == 'purple':
+            r, g, b = lcd_color_purple
+        else:
+            raise ValueError("Invalid color specified")
+
+        self.lcd.color = (r, g, b)
 
     def set_backlight(self, value):
         """
@@ -35,7 +58,10 @@ class LcdController:
         Parameters:
             value (bool): True to turn on the backlight, False to turn it off.
         """
-        self.backlight.value = value
+        if value:
+            self.lcd.color = (0, 100, 0)
+        else:
+            self.lcd.color = (0, 0, 0)
 
     def handle_buttons(self):
         """
@@ -48,27 +74,6 @@ class LcdController:
         """
         if self.lcd.select_button:
             print("Select button pressed")
-
-    def set_backlight_color(self, color):
-        # Define LCD colors using RGB values
-        lcd_color_red = [100, 0, 0]  # Red color
-        lcd_color_green = [0, 100, 0]  # Green color
-        lcd_color_blue = [0, 0, 100]  # Blue color
-        lcd_color_white = [100, 100, 100]  # White color (equal intensity of all components)
-
-        # Set the backlight color based on the provided color parameter
-        if color == 'red':
-            r, g, b = lcd_color_red
-        elif color == 'green':
-            r, g, b = lcd_color_green
-        elif color == 'blue':
-            r, g, b = lcd_color_blue
-        elif color == 'white':
-            r, g, b = lcd_color_white
-        else:
-            raise ValueError("Invalid color specified")
-
-        self.lcd.color = (r, g, b)
 
 
 class SchedMenu:
